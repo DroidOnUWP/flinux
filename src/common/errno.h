@@ -141,3 +141,6 @@
 #define L_ERFKILL			132	/* Operation not possible due to RF-kill */
 
 #define L_EHWPOISON			133	/* Memory page has hardware error */
+
+
+extern void set_errno(int err);

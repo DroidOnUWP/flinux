@@ -34,7 +34,10 @@ int kprintf(const char *format, ...)
 	va_list ap;
 	va_start(ap, format);
 	int size = kvsprintf(buffer, format, ap);
-	return console_write(buffer, size);
+	buffer[size] = 0;
+	OutputDebugStringA(buffer);
+	return size;
+	//return console_write(buffer, size);
 }
 
 int ksprintf(char *buf, const char *format, ...)

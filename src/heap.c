@@ -42,7 +42,7 @@ struct pool
 	struct bucket *first;
 };
 
-#define POOL_COUNT	11
+#define POOL_COUNT	13
 struct heap_data
 {
 	SRWLOCK rw_lock;
@@ -67,6 +67,8 @@ void heap_init()
 	heap->pools[8].objsize = 4096;		heap->pools[8].first = NULL;
 	heap->pools[9].objsize = 8192;		heap->pools[9].first = NULL;
 	heap->pools[10].objsize = 16384;	heap->pools[10].first = NULL;
+	heap->pools[11].objsize = 32768;	heap->pools[11].first = NULL;
+	heap->pools[12].objsize = 65536;	heap->pools[12].first = NULL;
 	log_info("heap subsystem initialized.");
 }
 
@@ -91,7 +93,7 @@ void heap_afterfork_child()
 	InitializeSRWLock(&heap->rw_lock);
 }
 
-#define ALIGN(x, align) (((x) + ((align) - 1)) & -(align))
+#define ALIGN(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
 static struct bucket *alloc_bucket(int objsize)
 {
 	struct bucket *b = mm_mmap(NULL, BLOCK_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE,
@@ -166,7 +168,7 @@ void kfree(void *mem, int size)
 {
 	AcquireSRWLockExclusive(&heap->rw_lock);
 	/* Find memory bucket */
-	void *bucket_addr = (void *)((size_t) mem & (-BLOCK_SIZE));
+	void *bucket_addr = (void *)((size_t) mem & ~(BLOCK_SIZE - 1));
 
 	/* Find pool */
 	int p = -1;

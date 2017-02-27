@@ -25,8 +25,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <stdarg.h>
+#include <onecore_types.h>
 
 int logger_attached;
+int logger_pipe;
 static __declspec(thread) HANDLE hLoggerPipe;
 static __declspec(thread) char buffer[1024];
 
@@ -65,7 +67,10 @@ void log_init_thread()
 			/* Non critical error code, just wait and try connecting again */
 			if (GetLastError() != ERROR_PIPE_BUSY || !WaitNamedPipeW(pipeName, NMPWAIT_WAIT_FOREVER))
 			{
-				logger_attached = 0;
+				// Open regular file instead
+				hLoggerPipe = CreateFileW(/*L"C:\\Data\\Users\\Public\\Documents\\*/L"flinux.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+				DWORD err = GetLastError();
+				//logger_attached = 0;
 				break;
 			}
 			continue;
@@ -82,12 +87,14 @@ void log_init_thread()
 			CloseHandle(hLoggerPipe);
 			logger_attached = 0;
 		}
+		logger_pipe = 1;
 		break;
 	}
 }
 
 void log_init()
 {
+	logger_pipe = 0;
 	logger_attached = 1;
 	log_init_thread();
 }
@@ -119,11 +126,30 @@ static void log_internal(int type, char typech, const char *format, va_list ap)
 	packet->len += kvsprintf(packet->text + packet->len, format, ap);
 	packet->packet_size = sizeof(struct packet) + packet->len;
 	DWORD bytes_written;
-	if (!WriteFile(hLoggerPipe, buffer, packet->packet_size, &bytes_written, NULL))
+	if (logger_pipe)
 	{
-		CloseHandle(hLoggerPipe);
-		logger_attached = 0;
+		if (!WriteFile(hLoggerPipe, buffer, packet->packet_size, &bytes_written, NULL))
+		{
+			CloseHandle(hLoggerPipe);
+			logger_attached = 0;
+		}
 	}
+	else
+	{
+		packet->text[packet->len] = '\n';
+		packet->len++;
+		packet->text[packet->len] = 0;
+
+		OutputDebugStringA(packet->text);
+
+		/*if (!WriteFile(hLoggerPipe, packet->text, packet->len, &bytes_written, NULL))
+		{
+			DWORD err = GetLastError();
+			CloseHandle(hLoggerPipe);
+			logger_attached = 0;
+		}*/
+	}
+
 }
 
 void log_debug_internal(const char *format, ...)

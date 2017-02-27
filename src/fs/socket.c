@@ -180,21 +180,6 @@ void socket_init()
 	socket_inited = 0;
 }
 
-struct socket_file_shared
-{
-	int af, type;
-	int events, connect_error;
-};
-
-struct socket_file
-{
-	struct file base_file;
-	SOCKET socket;
-	HANDLE event_handle;
-	HANDLE mutex;
-	WSAPROTOCOL_INFOW fork_info;
-	volatile struct socket_file_shared *shared;
-};
 
 /* Reports current ready state
  * If one event in error_report_events has potential error code, the last WSA error code is set to that
@@ -389,7 +374,7 @@ static int socket_recvfrom_unsafe(struct socket_file *f, void *buf, size_t len, 
 	return r;
 }
 
-static int socket_recvmsg_unsafe(struct socket_file *f, struct msghdr *msg, int flags)
+static int socket_recvmsg_unsafe(struct socket_file *f, struct msghdr	 *msg, int flags)
 {
 	if (flags & ~LINUX_MSG_DONTWAIT)
 		log_error("socket_sendmsg(): flags (0x%x) contains unsupported bits.", flags);
@@ -753,16 +738,21 @@ static int socket_connect(struct file *f, const struct sockaddr *addr, size_t ad
 			return r;
 		char buf[10];
 		r = winfs_read_special_file(winfile, WINFS_UNIX_HEADER, WINFS_UNIX_HEADER_LEN, buf, sizeof(buf));
+		if (r == 0) /* The file is not a socket file, fall to custom file */
+		{
+			//TODO: check if it is custom file
+			//redirect functions to custom file
+			vfs_replace(f, winfile);
+
+			return 0;
+			/*log_warning("Not a socket file.");
+			return -L_ECONNREFUSED;*/
+		}
 		vfs_release(winfile);
 		if (r < 0)
 		{
 			log_warning("Open socket file failed.");
 			return r;
-		}
-		if (r == 0) /* The file is not a socket file */
-		{
-			log_warning("Not a socket file.");
-			return -L_ECONNREFUSED;
 		}
 		buf[r] = 0;
 		int port;

@@ -21,7 +21,7 @@
 #include <ntdll.h>
 
 typedef ULONGLONG (NTAPI RtlGetSystemTimePrecise_t)();
-static RtlGetSystemTimePrecise_t *pfnRtlGetSystemTimePrecise;
+static RtlGetSystemTimePrecise_t *pfnRtlGetSystemTimePrecise = 0;
 
 void win7compat_GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimePreciseAsFileTime)
 {
@@ -37,7 +37,7 @@ void win7compat_GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimePreciseAsF
 
 void win7compat_init()
 {
-	HANDLE ntdll_handle;
+	/*HANDLE ntdll_handle;
 	UNICODE_STRING module_file_name;
 	RtlInitUnicodeString(&module_file_name, L"ntdll.dll");
 	NTSTATUS status = LdrLoadDll(NULL, 0, &module_file_name, &ntdll_handle);
@@ -45,5 +45,5 @@ void win7compat_init()
 		return;
 	ANSI_STRING function_name;
 	RtlInitAnsiString(&function_name, "RtlGetSystemTimePrecise");
-	LdrGetProcedureAddress(ntdll_handle, &function_name, 0, (PVOID *)&pfnRtlGetSystemTimePrecise);
+	LdrGetProcedureAddress(ntdll_handle, &function_name, 0, (PVOID *)&pfnRtlGetSystemTimePrecise);*/
 }

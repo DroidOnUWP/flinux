@@ -40,6 +40,7 @@
 #include <stdbool.h>
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <onecore_types.h>
 
 struct process_shared_data
 {
@@ -179,7 +180,22 @@ void process_init()
 	NtCreateEvent(&thread->wait_event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
 	signal_init_thread(thread);
 	current_thread = thread;
-	current_thread->stack_base = VirtualAlloc(NULL, STACK_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
+	/* TODO: stack_base */
+	/* Currently we use stack windows host process - later we should allocate own and switch SP to it
+	current_thread->stack_base = VirtualAlloc(NULL, STACK_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); //was execute, why? Because there was dbt code run on stack, grhhh :-(
+	current_thread->stack_limit = ((char*)current_thread->stack_base) + STACK_SIZE;
+	*/
+
+	THREAD_BASIC_INFORMATION basicInfo;
+	NT_TIB tib;
+
+	NtQueryInformationThread(GetCurrentThread(), ThreadBasicInformation, &basicInfo, sizeof(THREAD_BASIC_INFORMATION), NULL);
+	NtReadVirtualMemory(GetCurrentProcess(), basicInfo.TebBaseAddress, &tib, sizeof(NT_TIB), NULL);
+
+	current_thread->stack_base = tib.StackBase;
+	current_thread->stack_limit = tib.StackLimit;
+
 	log_info("PID: %d", pid);
 }
 
@@ -200,6 +216,7 @@ void process_afterfork_child(void *stack_base, pid_t pid)
 	signal_init_thread(thread);
 	current_thread = thread;
 	current_thread->stack_base = stack_base;
+	//stack size?
 	log_info("PID: %d", pid);
 }
 
@@ -223,13 +240,19 @@ void process_thread_entry(pid_t tid)
 	NtCreateEvent(&thread->wait_event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
 	signal_init_thread(thread);
 	current_thread = thread;
-	/* TODO: stack_base */
+
+
 	log_info("PID: %d", tid);
 }
 
 void *process_get_stack_base()
 {
 	return current_thread->stack_base;
+}
+
+void *process_get_stack_limit()
+{
+	return current_thread->stack_limit;
 }
 
 pid_t process_init_child(DWORD win_pid, DWORD win_tid, HANDLE process_handle)
@@ -639,7 +662,9 @@ int process_get_stat(char *buf)
 	/* Current soft limit of RSS: RLIMIT_RSS */
 	uintptr_t rsslim = 0;
 	buf += ksprintf(buf, "%lu ", rsslim);
-	uintptr_t startcode = 0, endcode = 0, startstack = 0; /* TODO */
+
+
+	uintptr_t startcode = 0, endcode = 0, startstack = process_get_stack_base(); /* TODO */
 	buf += ksprintf(buf, "%lu ", startcode);
 	buf += ksprintf(buf, "%lu ", endcode);
 	buf += ksprintf(buf, "%lu ", startstack);
@@ -728,7 +753,7 @@ DEFINE_SYSCALL(setsid)
 
 DEFINE_SYSCALL(getuid)
 {
-	log_info("getuid(): %d", 0);
+	//log_info("getuid(): %d", 0);
 	return 0;
 }
 
@@ -802,6 +827,9 @@ DEFINE_SYSCALL(getgroups, int, size, gid_t *, list)
 DEFINE_SYSCALL(exit, int, status)
 {
 	log_info("exit(%d)", status);
+	CONTEXT ctx;
+	RtlCaptureContext(&ctx);
+	print_stack_trace(ctx.Sp, 200);
 	thread_exit(status, 0);
 }
 
@@ -818,16 +846,16 @@ DEFINE_SYSCALL(uname, struct utsname *, buf)
 	if (!mm_check_write(buf, sizeof(struct utsname)))
 		return -L_EFAULT;
 	/* Just mimic a reasonable Linux uname */
-	strcpy(buf->sysname, "Linux");
-	strcpy(buf->nodename, "ForeignLinux");
-	strcpy(buf->release, "3.15.0");
-	strcpy(buf->version, "3.15.0");
+	strcpy_s(buf->sysname, sizeof(buf->sysname), "Linux");
+	strcpy_s(buf->nodename, sizeof(buf->nodename), "ForeignLinux");
+	strcpy_s(buf->release, sizeof(buf->release), "3.15.0");
+	strcpy_s(buf->version, sizeof(buf->version), "3.15.0");
 #ifdef _WIN64
-	strcpy(buf->machine, "x86_64");
+	strcpy_s(buf->machine, sizeof(buf->machine), "x86_64");
 #else
-	strcpy(buf->machine, "i686");
+	strcpy_s(buf->machine, sizeof(buf->machine), "i686");
 #endif
-	strcpy(buf->domainname, "GNU/Linux");
+	strcpy_s(buf->domainname, sizeof(buf->domainname), "GNU/Linux");
 	return 0;
 }
 
@@ -837,11 +865,11 @@ DEFINE_SYSCALL(olduname, struct old_utsname *, buf)
 		return -L_EFAULT;
 	struct utsname newbuf;
 	sys_uname(&newbuf);
-	strcpy(buf->sysname, newbuf.sysname);
-	strcpy(buf->nodename, newbuf.nodename);
-	strcpy(buf->release, newbuf.release);
-	strcpy(buf->version, newbuf.version);
-	strcpy(buf->machine, newbuf.machine);
+	strcpy_s(buf->sysname, sizeof(buf->sysname), newbuf.sysname);
+	strcpy_s(buf->nodename, sizeof(buf->nodename), newbuf.nodename);
+	strcpy_s(buf->release, sizeof(buf->release), newbuf.release);
+	strcpy_s(buf->version, sizeof(buf->version), newbuf.version);
+	strcpy_s(buf->machine, sizeof(buf->machine), newbuf.machine);
 	return 0;
 }
 
@@ -851,11 +879,11 @@ DEFINE_SYSCALL(oldolduname, struct oldold_utsname *, buf)
 		return -L_EFAULT;
 	struct utsname newbuf;
 	sys_uname(&newbuf);
-	strncpy(buf->sysname, newbuf.sysname, __OLD_UTS_LEN + 1);
-	strncpy(buf->nodename, newbuf.nodename, __OLD_UTS_LEN + 1);
-	strncpy(buf->release, newbuf.release, __OLD_UTS_LEN + 1);
-	strncpy(buf->version, newbuf.version, __OLD_UTS_LEN + 1);
-	strncpy(buf->machine, newbuf.machine, __OLD_UTS_LEN + 1);
+	strncpy_s(buf->sysname, sizeof(buf->sysname), newbuf.sysname, __OLD_UTS_LEN + 1);
+	strncpy_s(buf->nodename, sizeof(buf->nodename), newbuf.nodename, __OLD_UTS_LEN + 1);
+	strncpy_s(buf->release, sizeof(buf->release), newbuf.release, __OLD_UTS_LEN + 1);
+	strncpy_s(buf->version, sizeof(buf->version), newbuf.version, __OLD_UTS_LEN + 1);
+	strncpy_s(buf->machine, sizeof(buf->machine), newbuf.machine, __OLD_UTS_LEN + 1);
 	return 0;
 }
 
@@ -891,8 +919,8 @@ static int do_prlimit64(pid_t pid, int resource, const struct rlimit64 *new_limi
 		switch (resource)
 		{
 		case RLIMIT_STACK:
-			old_limit->rlim_cur = STACK_SIZE;
-			old_limit->rlim_max = STACK_SIZE;
+			old_limit->rlim_cur = (int)((char*)process_get_stack_base() - (char*)process_get_stack_limit());
+			old_limit->rlim_max = (int)((char*)process_get_stack_base() - (char*)process_get_stack_limit());
 			break;
 
 		case RLIMIT_NPROC:
@@ -1056,5 +1084,34 @@ DEFINE_SYSCALL(set_tid_address, int *, tidptr)
 {
 	log_info("set_tid_address(tidptr=%p)", tidptr);
 	log_error("clear_child_tid not supported.");
+
+	pid_t pid = process->pid;
+
+	// If it is main thread, return tid == pid
+	if (GetCurrentThreadId() == process_shared->processes[pid].win_tid)
+	{
+
+		return pid;
+	}
+
 	return GetCurrentThreadId();
 }
+
+
+DEFINE_SYSCALL(unshare, int, flags)
+{
+	log_info("unshare(flags=%d)", flags);
+	log_error("unshare not implemented");
+
+	return 0;
+}
+
+DEFINE_SYSCALL(acct, const char, *filename)
+{
+	log_info("acct(filename=%s)", filename);
+	log_error("acct not implemented");
+
+	return 0;
+
+}
+

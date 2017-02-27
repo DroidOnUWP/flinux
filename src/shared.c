@@ -21,8 +21,10 @@
 #include <flags.h>
 #include <log.h>
 #include <shared.h>
+#include <stdio.h> 
 
 #include <ntdll.h>
+#include <onecore_types.h>
 
 #define SHARED_HEAP_POOL_COUNT	1024
 #define SHARED_HEAP_POOL_SIZE	BLOCK_SIZE
@@ -82,11 +84,30 @@ static void shared_create_object_directory()
 	for (int i = 0; i < MAX_SESSION_ID_LEN; i++)
 		id[i] = cmdline_flags->global_session_id[i];
 
+	WCHAR appname_buf[128];
+
+	LONG ret;
+	if (!GetAppContainerNamedObjectPath(NULL, NULL, sizeof(appname_buf), appname_buf, &ret))
+	{
+		log_error("GetAppContainerNamedObjectPath() failed, error: %x", GetLastError());
+		NtTerminateProcess(NtCurrentProcess(), 1);
+	}
+
+	DWORD sessionId;
+	if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId))
+	{
+		log_error("ProcessIdToSessionId() failed, error: %x", GetLastError());
+		NtTerminateProcess(NtCurrentProcess(), 1);
+	}
 	UNICODE_STRING name;
-	WCHAR name_buf[64];
-	RtlInitEmptyUnicodeString(&name, name_buf, sizeof(name_buf));
-	RtlAppendUnicodeToString(&name, L"\\BaseNamedObjects\\flinux-");
-	RtlAppendUnicodeToString(&name, id);
+
+#define MAX_CHARS (200)
+
+	WCHAR name_buf[MAX_CHARS];
+
+	swprintf_s(name_buf, MAX_CHARS, L"\\Sessions\\%d\\%s\\flinux-%s", sessionId, appname_buf, id);
+
+	RtlInitUnicodeString(&name, name_buf);
 	OBJECT_ATTRIBUTES oa;
 	InitializeObjectAttributes(&oa, &name, OBJ_INHERIT | OBJ_OPENIF, NULL, NULL);
 	NTSTATUS status;
@@ -365,7 +386,7 @@ void kfree_shared(void *obj, size_t obj_size)
 	AcquireSRWLockExclusive(&shared->rw_lock);
 	WaitForSingleObject(shared->shared_heap_mutex, INFINITE);
 	/* Find pool id */
-	struct shared_heap_pool_header *pool = (struct shared_heap_pool_header *)((size_t)obj & -(SHARED_HEAP_POOL_SIZE));
+	struct shared_heap_pool_header *pool = (struct shared_heap_pool_header *)((size_t)obj & ~(SHARED_HEAP_POOL_SIZE - 1));
 	int last_pool = 0;
 	int current_pool = shared->shared_heap->pools[0].next_pool_id;
 	while (shared->shared_heap_mapped_pools[current_pool].addr != pool)

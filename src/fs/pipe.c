@@ -28,6 +28,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <ntdll.h>
+#include <onecore_types.h>
 
 /* POSIX.1 says that write(2)s of less than PIPE_BUF bytes must be atomic */
 #define PIPE_BUF	4096
@@ -232,7 +233,7 @@ out:
 	return r;
 }
 
-static int pipe_llseek(struct file *f, loff_t offset, loff_t *newoffset, int whence)
+static int pipe_llseek(struct file *f, lx_loff_t offset, lx_loff_t *newoffset, int whence)
 {
 	return -L_ESPIPE;
 }

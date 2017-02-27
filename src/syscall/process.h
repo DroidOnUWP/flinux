@@ -35,6 +35,7 @@ void process_afterfork_parent();
 void process_afterfork_child(void *stack_base, pid_t pid);
 void process_shutdown();
 void *process_get_stack_base();
+void *process_get_stack_limit();
 pid_t process_init_child(DWORD win_pid, DWORD win_tid, HANDLE process_handle);
 void process_thread_entry(pid_t tid);
 pid_t process_create_thread(DWORD win_tid);

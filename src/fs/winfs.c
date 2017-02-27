@@ -29,8 +29,7 @@
 #include <str.h>
 
 #include <ntdll.h>
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <onecore_types.h>
 #include <limits.h>
 #include <malloc.h>
 
@@ -360,10 +359,15 @@ static int winfs_getpath(struct file *f, char *buf)
 	WCHAR *relpath;
 	/* Test if the file is in the mount point */
 	/* \??\C:\Windows,  \Windows */
+
+	int offset = 6; // skip "\??\C:\"
+	if (!wcsncmp(mp.win_path + offset, L"\\Data\\", 6))
+		offset += 5; //skip "\Data"
+
 	if (mp.win_path[4] == winfile->drive_letter &&
-		!wcsncmp(mp.win_path + 6, info->FileName, mp.win_path_len - 6))
+		!_wcsnicmp(mp.win_path + offset, info->FileName, mp.win_path_len - offset))
 	{
-		relpath = info->FileName + mp.win_path_len - 6;
+		relpath = info->FileName + mp.win_path_len - offset;
 		/* Copy mount point */
 		memcpy(buf, mp.mountpoint, mp.mountpoint_len);
 		len = mp.mountpoint_len;
@@ -478,7 +482,7 @@ static size_t winfs_write(struct file *f, const void *buf, size_t count)
  * other problems such as file content desync, and file permission problems. Due to
  * the additional complications this method is not used here.
  */
-static size_t winfs_pread(struct file *f, void *buf, size_t count, loff_t offset)
+static size_t winfs_pread(struct file *f, void *buf, size_t count, lx_loff_t offset)
 {
 	AcquireSRWLockShared(&f->rw_lock);
 	struct winfs_file *winfile = (struct winfs_file *) f;
@@ -519,7 +523,7 @@ static size_t winfs_pread(struct file *f, void *buf, size_t count, loff_t offset
 	return num_read;
 }
 
-static size_t winfs_pwrite(struct file *f, const void *buf, size_t count, loff_t offset)
+static size_t winfs_pwrite(struct file *f, const void *buf, size_t count, lx_loff_t offset)
 {
 	AcquireSRWLockShared(&f->rw_lock);
 	struct winfs_file *winfile = (struct winfs_file *) f;
@@ -571,7 +575,7 @@ static size_t winfs_readlink(struct file *f, char *target, size_t buflen)
 	return r;
 }
 
-static int winfs_truncate(struct file *f, loff_t length)
+static int winfs_truncate(struct file *f, lx_loff_t length)
 {
 	AcquireSRWLockShared(&f->rw_lock);
 	struct winfs_file *winfile = (struct winfs_file *) f;
@@ -604,7 +608,7 @@ static int winfs_fsync(struct file *f)
 	return 0;
 }
 
-static int winfs_llseek(struct file *f, loff_t offset, loff_t *newoffset, int whence)
+static int winfs_llseek(struct file *f, lx_loff_t offset, lx_loff_t *newoffset, int whence)
 {
 	struct winfs_file *winfile = (struct winfs_file *) f;
 	DWORD dwMoveMethod;
@@ -636,8 +640,30 @@ static int winfs_stat(struct file *f, struct newstat *buf)
 {
 	AcquireSRWLockShared(&f->rw_lock);
 	struct winfs_file *winfile = (struct winfs_file *) f;
-	BY_HANDLE_FILE_INFORMATION info;
-	GetFileInformationByHandle(winfile->handle, &info);
+	FILE_BASIC_INFO binfo;
+	memset(&binfo, 0, sizeof(binfo));
+	FILE_STANDARD_INFO sinfo;
+	memset(&sinfo, 0, sizeof(sinfo));
+	FILE_ID_INFO idinfo;
+	memset(&idinfo, 0, sizeof(idinfo));
+	
+	if (!GetFileInformationByHandleEx(winfile->handle, FileBasicInfo, &binfo, sizeof(binfo)))
+	{
+		log_warning("GetFileInformationByHandleEx(FileBasicInfo ) failed, error: %x", GetLastError());
+		return -L_EIO;
+	}
+
+	if (!GetFileInformationByHandleEx(winfile->handle, FileIdInfo, &idinfo, sizeof(idinfo)))
+	{
+		log_warning("GetFileInformationByHandleEx(FileIdInfo ) failed, error: %x", GetLastError());
+		return -L_EIO;
+	}
+
+	if(!GetFileInformationByHandleEx(winfile->handle, FileStandardInfo, &sinfo, sizeof(sinfo)))
+	{
+		log_warning("GetFileInformationByHandleEx(FileStandardInfo) failed, error: %x", GetLastError());
+		return -L_EIO;
+	}
 
 	/* Programs (ld.so) may use st_dev and st_ino to identity files so these must be unique for each file. */
 	INIT_STRUCT_NEWSTAT_PADDING(buf);
@@ -646,21 +672,25 @@ static int winfs_stat(struct file *f, struct newstat *buf)
 	/* Hash 64 bit inode to 32 bit to fix legacy applications
 	 * We may later add an option for changing this behaviour
 	 */
-	buf->st_ino = info.nFileIndexHigh ^ info.nFileIndexLow;
-	if (info.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
+	buf->st_ino = *(uint64_t*)idinfo.FileId.Identifier;
+	buf->__st_ino = *(uint32_t*)idinfo.FileId.Identifier;
+	if (binfo.FileAttributes & FILE_ATTRIBUTE_READONLY)
 		buf->st_mode = 0555;
 	else
 		buf->st_mode = 0755;
-	if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	if (sinfo.Directory)
 	{
 		buf->st_mode |= S_IFDIR;
 		buf->st_size = 0;
 	}
 	else
 	{
+		if (sinfo.EndOfFile.HighPart != 0)
+			return -L_EIO;
+
 		buf->st_mode |= S_IFREG;
-		buf->st_size = ((uint64_t)info.nFileSizeHigh << 32ULL) + info.nFileSizeLow;
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM)
+		buf->st_size = (uint64_t)sinfo.EndOfFile.QuadPart;
+		if (binfo.FileAttributes & FILE_ATTRIBUTE_SYSTEM)
 		{
 			WaitForSingleObject(winfile->fp_mutex, INFINITE);
 			/* Save current file pointer */
@@ -688,18 +718,18 @@ static int winfs_stat(struct file *f, struct newstat *buf)
 			ReleaseMutex(winfile->fp_mutex);
 		}
 	}
-	buf->st_nlink = info.nNumberOfLinks;
+	buf->st_nlink = sinfo.NumberOfLinks;
 	buf->st_uid = 0;
 	buf->st_gid = 0;
 	buf->st_rdev = 0;
 	buf->st_blksize = PAGE_SIZE;
 	buf->st_blocks = (buf->st_size + buf->st_blksize - 1) / buf->st_blksize;
-	buf->st_atime = filetime_to_unix_sec(&info.ftLastAccessTime);
-	buf->st_atime_nsec = filetime_to_unix_nsec(&info.ftLastAccessTime);
-	buf->st_mtime = filetime_to_unix_sec(&info.ftLastWriteTime);
-	buf->st_mtime_nsec = filetime_to_unix_nsec(&info.ftLastWriteTime);
-	buf->st_ctime = filetime_to_unix_sec(&info.ftCreationTime);
-	buf->st_ctime_nsec = filetime_to_unix_nsec(&info.ftCreationTime);
+	buf->st_atime = filetime_to_unix_sec(&binfo.LastAccessTime);
+	buf->st_atime_nsec = filetime_to_unix_nsec(&binfo.LastAccessTime);
+	buf->st_mtime = filetime_to_unix_sec(&binfo.LastWriteTime);
+	buf->st_mtime_nsec = filetime_to_unix_nsec(&binfo.LastWriteTime);
+	buf->st_ctime = filetime_to_unix_sec(&binfo.CreationTime);
+	buf->st_ctime_nsec = filetime_to_unix_nsec(&binfo.CreationTime);
 	ReleaseSRWLockShared(&f->rw_lock);
 	return 0;
 }
@@ -1058,8 +1088,15 @@ static int winfs_mkdir(struct mount_point *mp, const char *pathname, int mode)
 {
 	WCHAR wpathname[PATH_MAX];
 
-	if (utf8_to_utf16_filename(pathname, strlen(pathname) + 1, wpathname, PATH_MAX) <= 0)
+	/*if (utf8_to_utf16_filename(pathname, strlen(pathname) + 1, wpathname, PATH_MAX) <= 0)
+		return -L_ENOENT;*/
+
+	int len = filename_to_nt_pathname(mp, pathname, wpathname, PATH_MAX);
+	if (len <= 0)
 		return -L_ENOENT;
+	wpathname[len] = 0;
+
+
 	if (!CreateDirectoryW(wpathname, NULL))
 	{
 		DWORD err = GetLastError();

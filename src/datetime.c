@@ -47,7 +47,7 @@ uint64_t filetime_to_unix_nsec(const FILETIME *filetime)
 	return nsec % NANOSECONDS_PER_SECOND;
 }
 
-void filetime_to_unix_timeval(const FILETIME *filetime, struct timeval *tv)
+void filetime_to_unix_timeval(const FILETIME *filetime, struct linux_timeval *tv)
 {
 	uint64_t nsec = filetime_to_unix(filetime);
 	/* TODO: Handle overflow? */
@@ -70,7 +70,7 @@ static void unix_time_to_filetime(uint64_t nsec, FILETIME *filetime)
 	filetime->dwHighDateTime = (DWORD)(ticks / 0x100000000ULL);
 }
 
-void unix_timeval_to_filetime(const struct timeval *time, FILETIME *filetime)
+void unix_timeval_to_filetime(const struct linux_timeval *time, FILETIME *filetime)
 {
 	unix_time_to_filetime((uint64_t)time->tv_sec * NANOSECONDS_PER_SECOND + (uint64_t)time->tv_usec * 1000ULL, filetime);
 }
@@ -80,7 +80,7 @@ void unix_timespec_to_filetime(const struct timespec *time, FILETIME *filetime)
 	unix_time_to_filetime((uint64_t)time->tv_sec * NANOSECONDS_PER_SECOND + (uint64_t)time->tv_nsec, filetime);
 }
 
-void unix_timeval_to_unix_timespec(const struct timeval *timeval, struct timespec *timespec)
+void unix_timeval_to_unix_timespec(const struct linux_timeval *timeval, struct timespec *timespec)
 {
 	timespec->tv_sec = timeval->tv_sec;
 	timespec->tv_nsec = timeval->tv_usec * 1000;

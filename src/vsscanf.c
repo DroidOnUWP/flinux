@@ -52,9 +52,9 @@ static int kisspace(unsigned char ch)
 		}												\
 		if (neg)										\
 		{												\
-			if ((type)value < 0 && -(type)value != 0)	\
+			if ((type)value < 0 && ~(type)(value -1) != 0)	\
 				return count;							\
-			*out = -(type)value;						\
+			*out = (type)~(value - 1);					\
 		}												\
 		else if (IS_SIGNED(type))						\
 		{												\

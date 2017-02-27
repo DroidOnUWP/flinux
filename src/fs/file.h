@@ -22,12 +22,11 @@
 #include <common/dirent.h>
 #include <common/stat.h>
 #include <common/statfs.h>
-#include <common/types.h>
 #include <common/utime.h>
+#include <common/types.h>
 
 #include <stdbool.h>
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+
 
 #define GETDENTS_UTF8	1
 #define GETDENTS_UTF16	2
@@ -55,12 +54,12 @@ struct file_ops
 	int (*getpath)(struct file *f, char *buf);
 	size_t (*read)(struct file *f, void *buf, size_t count);
 	size_t (*write)(struct file *f, const void *buf, size_t count);
-	size_t (*pread)(struct file *f, void *buf, size_t count, loff_t offset);
-	size_t (*pwrite)(struct file *f, const void *buf, size_t count, loff_t offset);
+	size_t (*pread)(struct file *f, void *buf, size_t count, lx_loff_t offset);
+	size_t (*pwrite)(struct file *f, const void *buf, size_t count, lx_loff_t offset);
 	size_t (*readlink)(struct file *f, char *buf, size_t bufsize);
-	int (*truncate)(struct file *f, loff_t length);
+	int (*truncate)(struct file *f, lx_loff_t length);
 	int (*fsync)(struct file *f);
-	int (*llseek)(struct file *f, loff_t offset, loff_t *newoffset, int whence);
+	int (*llseek)(struct file *f, lx_loff_t offset, lx_loff_t *newoffset, int whence);
 	int (*stat)(struct file *f, struct newstat *buf);
 	int (*utimens)(struct file *f, const struct timespec *times);
 	int (*getdents)(struct file *f, void *dirent, size_t count, getdents_callback *fill_callback);

@@ -37,7 +37,7 @@ static const char *uppercase = "0123456789ABCDEF";
 		if (IS_SIGNED(type) && y < 0)			\
 		{										\
 			sign = 1;							\
-			y = -y;								\
+			y = ~(y - 1);								\
 		}										\
 		utype z = (utype)y;						\
 		int len = 0;							\
@@ -193,8 +193,8 @@ int kvsprintf(char *buffer, const char *format, va_list args)
 			}
 			}
 		}
-		else if (*format == '\n')
-			*buf++ = '\r';
+		/*else if (*format == '\n')
+			*buf++ = '\r';*/
 		*buf++ = *format++;
 	}
 	return (int)(buf - buffer);

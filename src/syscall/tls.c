@@ -26,9 +26,8 @@
 #include <log.h>
 #include <platform.h>
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include <winternl.h>
+#include <ntdll.h>
+#include <common/winapi_missing.h>
 #include <stddef.h>
 
 #define MAX_TLS_ENTRIES		0x10

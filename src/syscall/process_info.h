@@ -46,6 +46,8 @@ struct thread
 	HANDLE handle;
 	/* Stack base of the thread */
 	void *stack_base;
+	/* Stack limit of the thread */
+	void *stack_limit;
 	/* clear_tid address for CLONE_CHILD_CLEARTID */
 	pid_t *clear_tid;
 	/*********** For futex() ***********/

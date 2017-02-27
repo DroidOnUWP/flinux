@@ -24,6 +24,7 @@
 #include <syscall/process_info.h>
 #include <syscall/sig.h>
 #include <syscall/syscall.h>
+#include <syscall/tls.h>
 #include <lib/list.h>
 #include <log.h>
 
@@ -244,6 +245,15 @@ DEFINE_SYSCALL(futex, int *, uaddr, int, op, int, val, const struct timespec *, 
 		if (!mm_check_read(uaddr2, sizeof(int)))
 			return -L_EACCES;
 		return futex_requeue(uaddr, val, uaddr2, &val3);
+	}
+
+	case FUTEX_WAIT_BITSET :
+	{
+		//TODO: FIXME
+		if (timeout && !mm_check_read(timeout, sizeof(struct timespec)))
+			return -L_EFAULT;
+		DWORD time = timeout ? timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000 : INFINITE;
+		return futex_wait((volatile int *)uaddr, val, time);
 	}
 
 	default:

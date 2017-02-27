@@ -18,5 +18,14 @@
  */
 
 #pragma once
+#include "platform/arm/context.h"
 
-void fork_init();
+extern void fork_init();
+
+
+#ifdef _WIN64
+extern int sys_clone_imp(struct syscall_context *context, unsigned long flags, void *child_stack, void *ptid, void *ctid);
+#else
+extern int sys_clone_imp(struct syscall_context *context, unsigned long flags, void *child_stack, void *ptid, int tls, void *ctid);
+#endif
+

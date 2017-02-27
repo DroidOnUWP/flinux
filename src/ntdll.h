@@ -252,6 +252,237 @@ NTSYSAPI NTSTATUS NTAPI NtReleaseMutant(
 	_Out_opt_	PULONG PreviousState
 	);
 
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtCreateProcess(
+	OUT PHANDLE ProcessHandle,
+	IN ACCESS_MASK DesiredAccess,
+	IN POBJECT_ATTRIBUTES ObjectAttributes,
+	IN HANDLE InheritFromProcessHandle,
+	IN BOOLEAN InheritHandles,
+	IN HANDLE SectionHandle OPTIONAL,
+	IN HANDLE DebugPort OPTIONAL,
+	IN HANDLE ExceptionPort OPTIONAL
+);
+
+
+#define THREAD_CREATE_FLAGS_CREATE_SUSPENDED 0x00000001
+#define THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH 0x00000002 // ?
+#define THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER 0x00000004
+#define THREAD_CREATE_FLAGS_HAS_SECURITY_DESCRIPTOR 0x00000010 // ?
+#define THREAD_CREATE_FLAGS_ACCESS_CHECK_IN_TARGET 0x00000020 // ?
+#define THREAD_CREATE_FLAGS_INITIAL_THREAD 0x00000080
+
+// Extended PROCESS_CREATE_FLAGS_*
+// begin_rev
+#define PROCESS_CREATE_FLAGS_LARGE_PAGE_SYSTEM_DLL 0x00000020
+#define PROCESS_CREATE_FLAGS_PROTECTED_PROCESS 0x00000040
+#define PROCESS_CREATE_FLAGS_CREATE_SESSION 0x00000080 // ?
+#define PROCESS_CREATE_FLAGS_INHERIT_FROM_PARENT 0x00000100
+// end_rev
+
+
+
+typedef struct _PS_ATTRIBUTE
+{
+	ULONG_PTR Attribute;
+	SIZE_T Size;
+	union
+	{
+		ULONG_PTR Value;
+		PVOID ValuePtr;
+	};
+	PSIZE_T ReturnLength;
+} PS_ATTRIBUTE, *PPS_ATTRIBUTE;
+
+typedef struct _PS_ATTRIBUTE_LIST
+{
+	SIZE_T TotalLength;
+	PS_ATTRIBUTE Attributes[1];
+} PS_ATTRIBUTE_LIST, *PPS_ATTRIBUTE_LIST;
+typedef enum _PS_CREATE_STATE
+{
+	PsCreateInitialState,
+	PsCreateFailOnFileOpen,
+	PsCreateFailOnSectionCreate,
+	PsCreateFailExeFormat,
+	PsCreateFailMachineMismatch,
+	PsCreateFailExeName, // Debugger specified
+	PsCreateSuccess,
+	PsCreateMaximumStates
+} PS_CREATE_STATE;
+
+typedef struct _PS_CREATE_INFO
+{
+	SIZE_T Size;
+	PS_CREATE_STATE State;
+	union
+	{
+		// PsCreateInitialState
+		struct
+		{
+			union
+			{
+				ULONG InitFlags;
+				struct
+				{
+					UCHAR WriteOutputOnExit : 1;
+					UCHAR DetectManifest : 1;
+					UCHAR IFEOSkipDebugger : 1;
+					UCHAR IFEODoNotPropagateKeyState : 1;
+					UCHAR SpareBits1 : 4;
+					UCHAR SpareBits2 : 8;
+					USHORT ProhibitedImageCharacteristics : 16;
+				};
+			};
+			ACCESS_MASK AdditionalFileAccess;
+		} InitState;
+
+		// PsCreateFailOnSectionCreate
+		struct
+		{
+			HANDLE FileHandle;
+		} FailSection;
+
+		// PsCreateFailExeFormat
+		struct
+		{
+			USHORT DllCharacteristics;
+		} ExeFormat;
+
+		// PsCreateFailExeName
+		struct
+		{
+			HANDLE IFEOKey;
+		} ExeName;
+
+		// PsCreateSuccess
+		struct
+		{
+			union
+			{
+				ULONG OutputFlags;
+				struct
+				{
+					UCHAR ProtectedProcess : 1;
+					UCHAR AddressSpaceOverride : 1;
+					UCHAR DevOverrideEnabled : 1; // from Image File Execution Options
+					UCHAR ManifestDetected : 1;
+					UCHAR ProtectedProcessLight : 1;
+					UCHAR SpareBits1 : 3;
+					UCHAR SpareBits2 : 8;
+					USHORT SpareBits3 : 16;
+				};
+			};
+			HANDLE FileHandle;
+			HANDLE SectionHandle;
+			ULONGLONG UserProcessParametersNative;
+			ULONG UserProcessParametersWow64;
+			ULONG CurrentParameterFlags;
+			ULONGLONG PebAddressNative;
+			ULONG PebAddressWow64;
+			ULONGLONG ManifestAddress;
+			ULONG ManifestSize;
+		} SuccessState;
+	};
+} PS_CREATE_INFO, *PPS_CREATE_INFO;
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtCreateUserProcess(
+	_Out_ PHANDLE ProcessHandle,
+	_Out_ PHANDLE ThreadHandle,
+	_In_ ACCESS_MASK ProcessDesiredAccess,
+	_In_ ACCESS_MASK ThreadDesiredAccess,
+	_In_opt_ POBJECT_ATTRIBUTES ProcessObjectAttributes,
+	_In_opt_ POBJECT_ATTRIBUTES ThreadObjectAttributes,
+	_In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+	_In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+	_In_opt_ PVOID ProcessParameters, // PRTL_USER_PROCESS_PARAMETERS
+	_Inout_ PPS_CREATE_INFO CreateInfo,
+	_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+);
+
+typedef struct _INITIAL_TEB
+{
+	struct
+	{
+	PVOID OldStackBase;
+	PVOID OldStackLimit;
+	} OldInitialTeb;
+	PVOID StackBase;
+	PVOID StackLimit;
+    PVOID StackAllocationBase;
+} INITIAL_TEB, *PINITIAL_TEB;
+
+
+/* Thread */
+typedef struct _CLIENT_ID {
+	HANDLE UniqueProcess;
+	HANDLE UniqueThread;
+} CLIENT_ID, *PCLIENT_ID;
+
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtCreateThread(
+	OUT PHANDLE ThreadHandle,
+	IN ACCESS_MASK DesiredAccess,
+	IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+	IN HANDLE ProcessHandle,
+	OUT PCLIENT_ID ClientId,
+	IN PCONTEXT ThreadContext,
+	IN PINITIAL_TEB InitialTeb,
+	IN BOOLEAN CreateSuspended
+);
+
+VOID WINAPI RtlRestoreContext(
+	_In_ PCONTEXT ContextRecord,
+	_In_ PEXCEPTION_RECORD ExceptionRecord
+);
+
+
+#define RTL_CLONE_PROCESS_FLAGS_CREATE_SUSPENDED	0x00000001
+#define RTL_CLONE_PROCESS_FLAGS_INHERIT_HANDLES		0x00000002
+#define RTL_CLONE_PROCESS_FLAGS_NO_SYNCHRONIZE		0x00000004
+
+#define RTL_CLONE_PARENT				0
+#define RTL_CLONE_CHILD					297
+
+typedef struct _SECTION_IMAGE_INFORMATION {
+	PVOID EntryPoint;
+	ULONG StackZeroBits;
+	ULONG StackReserved;
+	ULONG StackCommit;
+	ULONG ImageSubsystem;
+	WORD SubSystemVersionLow;
+	WORD SubSystemVersionHigh;
+	ULONG Unknown1;
+	ULONG ImageCharacteristics;
+	ULONG ImageMachineType;
+	ULONG Unknown2[3];
+} SECTION_IMAGE_INFORMATION, *PSECTION_IMAGE_INFORMATION;
+
+typedef struct _RTL_USER_PROCESS_INFORMATION {
+	ULONG Size;
+	HANDLE Process;
+	HANDLE Thread;
+	CLIENT_ID ClientId;
+	SECTION_IMAGE_INFORMATION ImageInformation;
+} RTL_USER_PROCESS_INFORMATION, *PRTL_USER_PROCESS_INFORMATION;
+
+NTSYSAPI
+NTSTATUS
+NTAPI RtlCloneUserProcess(ULONG ProcessFlags,
+	PSECURITY_DESCRIPTOR ProcessSecurityDescriptor /* optional */,
+	PSECURITY_DESCRIPTOR ThreadSecurityDescriptor /* optional */,
+	HANDLE DebugPort /* optional */,
+	PRTL_USER_PROCESS_INFORMATION ProcessInformation);
+
 /* File API */
 /* Create disposition flags */
 #define FILE_SUPERSEDE                  0x00000000
@@ -558,6 +789,15 @@ NTSYSAPI NTSTATUS NTAPI NtSetEaFile(
 	);
 
 /* Virtual memory */
+NTSYSAPI NTSTATUS NTAPI NtAllocateVirtualMemory(
+	_In_    HANDLE    ProcessHandle,
+	_Inout_ PVOID     *BaseAddress,
+	_In_    ULONG_PTR ZeroBits,
+	_Inout_ PSIZE_T  RegionSize,
+	_In_    ULONG     AllocationType,
+	_In_    ULONG     Protect
+);
+
 NTSYSAPI NTSTATUS NTAPI NtWriteVirtualMemory(
 	_In_		HANDLE ProcessHandle,
 	_In_		PVOID BaseAddress,
@@ -614,11 +854,6 @@ NTSYSAPI NTSTATUS NTAPI NtUnmapViewOfSection(
 	_In_opt_	PVOID BaseAddress
 	);
 
-/* Thread */
-typedef struct _CLIENT_ID {
-	HANDLE UniqueProcess;
-	HANDLE UniqueThread;
-} CLIENT_ID;
 
 typedef LONG KPRIORITY;
 
@@ -808,3 +1043,4 @@ NTSYSAPI NTSTATUS NTAPI LdrGetProcedureAddress(
 	_In_		WORD Ordinal,
 	_Out_		PVOID *FunctionAddress
 	);
+

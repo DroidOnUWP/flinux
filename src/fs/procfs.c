@@ -19,7 +19,7 @@
 
 #include <common/errno.h>
 #include <common/param.h>
-#include <dbt/cpuid.h>
+//#include <dbt/cpuid.h>
 #include <fs/procfs.h>
 #include <fs/virtual.h>
 #include <syscall/process.h>
@@ -30,6 +30,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <onecore_types.h>
 
 static int proc_maps_gettext(int tag, char *buf)
 {
@@ -52,6 +53,8 @@ static int proc_stat_gettext(int tag, char *buf)
 
 static struct virtualfs_text_desc proc_stat_desc = VIRTUALFS_TEXT(proc_stat_gettext);
 
+static const struct virtualfs_directory_desc proc_task_desc;
+
 struct virtualfs_directory_desc proc_pid_desc =
 {
 	.type = VIRTUALFS_TYPE_DIRECTORY,
@@ -59,6 +62,7 @@ struct virtualfs_directory_desc proc_pid_desc =
 		VIRTUALFS_ENTRY("maps", proc_maps_desc)
 		VIRTUALFS_ENTRY("mounts", proc_mounts_desc)
 		VIRTUALFS_ENTRY("stat", proc_stat_desc)
+		VIRTUALFS_ENTRY("task", proc_task_desc)
 		VIRTUALFS_ENTRY_END()
 	}
 };
@@ -71,7 +75,7 @@ static int procfs_pid_open(int dir_tag, const char *name, int namelen, int *file
 	char buf[32];
 	if (namelen >= sizeof(buf))
 		return -L_ENOENT;
-	strncpy(buf, name, namelen);
+	strncpy_s(buf, sizeof(buf), name, namelen);
 	buf[namelen] = 0;
 	pid_t pid;
 	if (!katou(buf, &pid))
@@ -125,6 +129,8 @@ static int stat_gettext(int tag, char *buf)
 
 	buf += ksprintf(buf, "cpu   %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
 		user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice);
+	buf += ksprintf(buf, "cpu0  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+		user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice);
 	buf += ksprintf(buf, "intr  %llu\n", 0);
 	buf += ksprintf(buf, "swap  %llu %llu\n", 0);
 	uint64_t ctxt = 0;
@@ -147,6 +153,8 @@ static struct virtualfs_text_desc stat_desc = VIRTUALFS_TEXT(stat_gettext);
 
 static int cpuinfo_gettext(int tag, char *buf)
 {
+	/*char vendorid[13];
+	vendorid[12] = 0;
 	struct cpuid_t cpuid;
 
 	char vendorid[13];
@@ -198,6 +206,8 @@ static int cpuinfo_gettext(int tag, char *buf)
 
 	char flags[4096];
 	dbt_get_cpuinfo(flags);
+*/
+
 	return ksprintf(buf,
 		"processor\t: 0\n"
 		"vendor_id\t: %s\n"
@@ -210,16 +220,18 @@ static int cpuinfo_gettext(int tag, char *buf)
 		"flags\t\t:%s\n"
 		"clflush size\t: %d\n"
 		"address sizes\t: %d bits physical, %d bits virtual\n",
-		vendorid,
-		family,
-		model,
-		modelname,
-		stepping,
-		cache_size / 1024,
-		cpuid_level,
-		flags,
-		clflush_size,
-		physical_address_bits, virtual_address_bits);
+		"Unknown",//vendor
+		1,//family,
+		1,//model,
+		"",//modelname,
+		1,//stepping,
+		1024,//cache_size / 1024,
+		1,//cpuid_level,
+		"FLG",//flags,
+		1024,//clflush_size,
+		20,//physical_address_bits,
+		20//virtual_address_bits);
+	);
 }
 
 static struct virtualfs_text_desc cpuinfo_desc = VIRTUALFS_TEXT(cpuinfo_gettext);
@@ -273,6 +285,8 @@ static int uptime_gettext(int tag, char *buf)
 
 static struct virtualfs_text_desc uptime_desc = VIRTUALFS_TEXT(uptime_gettext);
 
+
+
 static const struct virtualfs_directory_desc procfs =
 {
 	.type = VIRTUALFS_TYPE_DIRECTORY,
@@ -289,6 +303,16 @@ static const struct virtualfs_directory_desc procfs =
 		VIRTUALFS_ENTRY_END()
 	}
 };
+
+static const struct virtualfs_directory_desc proc_task_desc =
+{
+	.type = VIRTUALFS_TYPE_DIRECTORY,
+	.entries = {
+		VIRTUALFS_ENTRY_DYNAMIC(procfs_pid_begin_iter, procfs_pid_end_iter, procfs_pid_iter, procfs_pid_open) //TODO: only pid of parent dir should be there
+		VIRTUALFS_ENTRY_END()
+	}
+};
+
 
 struct file_system *procfs_alloc()
 {

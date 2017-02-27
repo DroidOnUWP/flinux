@@ -37,9 +37,9 @@
 #define S_IWOTH		00002
 #define S_IXOTH		00001
 
-struct stat
+struct lx_stat
 {
-	uint32_t st_dev;
+	uint64_t st_dev;
 	uint32_t st_ino;
 	uint16_t st_mode;
 	uint16_t st_nlink;
@@ -66,7 +66,7 @@ struct stat
 	} while (0)
 
 #pragma pack(push, 4)
-struct stat64
+struct lx_stat64
 {
 	uint64_t st_dev;
 	uint32_t __pad1;
@@ -76,9 +76,10 @@ struct stat64
 	uint32_t st_uid;
 	uint32_t st_gid;
 	uint64_t st_rdev;
-	uint32_t __pad2;
-	uint64_t st_size;
+	uint64_t __pad2; //arm=8 bytes and i386 4=bytes??
+	int64_t st_size;
 	uint32_t st_blksize;
+	uint32_t __pad3;
 	uint64_t st_blocks;
 	uint32_t st_atime;
 	uint32_t st_atime_nsec;
@@ -94,14 +95,52 @@ struct stat64
 	do { \
 		st->__pad1 = 0; \
 		st->__pad2 = 0; \
+		st->__pad3 = 0; \
 	} while (0)
 
 #pragma pack(push, 4)
+
+struct newstat
+{
+	unsigned long long  st_dev;
+	unsigned char       __pad0[4];
+
+	unsigned long       __st_ino;
+	unsigned int        st_mode;
+	unsigned int        st_nlink;
+
+	unsigned long       st_uid;
+	unsigned long       st_gid;
+
+	unsigned long long  st_rdev;
+	unsigned char       __pad3[8];
+
+	long long           st_size;
+	unsigned long	st_blksize;
+
+	unsigned char       __pad5[4];
+
+	unsigned long long  st_blocks;
+
+
+	unsigned long       st_atime;
+	unsigned long       st_atime_nsec;
+
+	unsigned long       st_mtime;
+	unsigned long       st_mtime_nsec;
+
+	unsigned long       st_ctime;
+	unsigned long       st_ctime_nsec;
+
+	unsigned long long  st_ino;
+};
+
+/*
 struct newstat
 {
 	uint64_t st_dev;
-	uint64_t st_ino;
-	uint64_t st_nlink;
+	uint32_t st_ino;
+	uint32_t st_nlink;
 	uint32_t st_mode;
 	uint32_t st_uid;
 	uint32_t st_gid;
@@ -117,15 +156,29 @@ struct newstat
 	uint64_t st_ctime;
 	uint64_t st_ctime_nsec;
 	uint64_t __unused[3];
+
+	
 };
+*/
 #pragma pack(pop)
 
 #define INIT_STRUCT_NEWSTAT_PADDING(st) \
 	do { \
-		st->__pad0 = 0; \
-		st->__unused[0] = 0; \
-		st->__unused[1] = 0; \
-		st->__unused[2] = 0; \
+		st->__pad0[0] = 0; \
+		st->__pad0[1] = 0; \
+		st->__pad0[2] = 0; \
+		st->__pad0[3] = 0; \
+		st->__pad3[0] = 0; \
+		st->__pad3[1] = 0; \
+		st->__pad3[2] = 0; \
+		st->__pad3[3] = 0; \
+		st->__pad5[0] = 0; \
+		st->__pad5[1] = 0; \
+		st->__pad5[2] = 0; \
+		st->__pad5[3] = 0; \
+/*		st->__unused[0] = 0; */\
+/*		st->__unused[1] = 0; */\
+/*		st->__unused[2] = 0; */\
 	} while (0)
 
 #define major(dev)		((unsigned int) ((dev) >> 8))

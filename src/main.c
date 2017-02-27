@@ -38,13 +38,18 @@
 #include <Windows.h>
 
 #pragma comment(linker,"/entry:main")
-#pragma comment(lib,"delayimp")
+//#pragma comment(lib,"delayimp")
  /* VS 2015 does not pull this in when manually specifying entrypoint, don't know why. */
 #ifdef _DEBUG
-#pragma comment(lib,"libucrtd")
+#pragma comment(lib,"ucrtd")
+#pragma comment(lib,"msvcrtd")
+#pragma comment(lib,"vcruntimed")
 #else
-#pragma comment(lib,"libucrt")
+#pragma comment(lib,"ucrt")
+#pragma comment(lib,"msvcrt")
+#pragma comment(lib,"vcruntime")
 #endif
+
 
 static void print_usage()
 {
@@ -86,6 +91,7 @@ static void print_help()
 	kprintf("  --dbt-trace-all   Full trace of dbt execution. (massive performance drop)\n");
 }
 
+
 /*
  * Startup data is divided into two parts
  * The actual used part is flipped upon execve()
@@ -101,7 +107,7 @@ static void init_subsystems()
 	signal_init();
 	process_init();
 	tls_init();
-	vfs_init();
+	vfs_init(L"\\\\?\\C:\\Logs\\archlinux");
 	dbt_init();
 }
 
@@ -113,7 +119,6 @@ static void init_subsystems()
 
 void main()
 {
-	win7compat_init();
 	log_init();
 	fork_init();
 	/* fork_init() will directly jump to restored thread context if we are a fork child */
@@ -177,7 +182,7 @@ void main()
 	envp[4] = NULL;
 	char *buffer_base = (char*)(envp + env_size + 1);
 
-	const char *filename = NULL;
+	const char *filename = "/bin/bash";
 	int arg_start;
 	for (int i = 1; i < argc; i++)
 	{
@@ -203,7 +208,7 @@ void main()
 						process_exit(1, 0);
 					}
 				}
-				strcpy(cmdline_flags->global_session_id, argv[i]);
+				strcpy_s(cmdline_flags->global_session_id, sizeof(cmdline_flags->global_session_id), argv[i]);
 			}
 			else
 			{
@@ -236,6 +241,11 @@ void main()
 		{
 			cmdline_flags->dbt_trace = true;
 			cmdline_flags->dbt_trace_all = true;
+		}
+		else if (!strncmp(argv[i], "-ServerName:", 12))
+		{
+			// Ignore this option for app container
+			arg_start = i;
 		}
 		else if (argv[i][0] == '-')
 		{

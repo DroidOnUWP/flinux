@@ -21,6 +21,8 @@
 #include <common/sigcontext.h>
 #include <common/sigframe.h>
 #include <common/signal.h>
+#include <common/time.h>
+#include <context.h>
 #include <syscall/mm.h>
 #include <syscall/process.h>
 #include <syscall/process_info.h>
@@ -33,12 +35,14 @@
 #include <stdbool.h>
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <onecore_types.h>
 
 struct signal_data
 {
 	HANDLE thread;
 	HANDLE iocp;
-	HANDLE sigread, sigwrite;
+	HANDLE dataready, bufferready;
+	void* buffer;
 	HANDLE process_wait_semaphore;
 	HANDLE query_mutex;
 	CRITICAL_SECTION mutex;
@@ -68,13 +72,22 @@ static struct signal_data *signal;
 
 /* Create a uni-direction, message based pipe */
 static volatile long process_pipe_count = 0;
-static bool create_pipe(HANDLE *read, HANDLE *write, bool is_duplex)
+static bool create_pipe(struct signal_data* sig)
 {
+	//Pipes are not allowed in AppContainer so we must use another approach
+	/*
 	DWORD open_mode = is_duplex ? PIPE_ACCESS_DUPLEX : PIPE_ACCESS_INBOUND;
 	char pipe_name[256];
+	wchar_t pipe_namew[256];
 	long pipe_id = InterlockedIncrement(&process_pipe_count);
 	ksprintf(pipe_name, "\\\\.\\pipe\\flinux-fsig%d-%d", GetCurrentProcessId(), pipe_id);
-	HANDLE server = CreateNamedPipeA(pipe_name,
+
+	if (MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pipe_name, -1, pipe_namew, sizeof(pipe_namew) / sizeof(wchar_t)) == 0)
+	{
+		return false;
+	}
+
+	HANDLE server = CreateNamedPipeW(pipe_namew,
 		open_mode | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
 		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
 		1,
@@ -98,6 +111,144 @@ static bool create_pipe(HANDLE *read, HANDLE *write, bool is_duplex)
 	}
 	*read = server;
 	*write = client;
+	return true;
+	*/
+
+	char pipe_name[256];
+	wchar_t pipe_namew[256];
+
+	long pipe_id = InterlockedIncrement(&process_pipe_count);
+	ksprintf(pipe_name, "flinux-fsig_mutex%d-%d", GetCurrentProcessId(), pipe_id);
+
+	if (MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pipe_name, -1, pipe_namew, sizeof(pipe_namew) / sizeof(wchar_t)) == 0)
+	{
+		return false;
+	}
+
+
+	HANDLE mutex = OpenMutex(
+		MUTEX_ALL_ACCESS,
+		FALSE,
+		pipe_namew
+	);
+	if (mutex == NULL) {
+
+		mutex = CreateMutexEx(
+			NULL,
+			pipe_namew,
+			0,
+			MUTEX_ALL_ACCESS
+		);
+
+		if (mutex == NULL) {
+			return false;
+		}
+	}
+
+	ksprintf(pipe_name, "flinux-fsig_bufready%d-%d", GetCurrentProcessId(), pipe_id);
+
+	if (MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pipe_name, -1, pipe_namew, sizeof(pipe_namew) / sizeof(wchar_t)) == 0)
+	{
+		return false;
+	}
+
+	// Event: buffer ready
+	// ---------------------------------------------------------
+	HANDLE event_buffer_ready = OpenEvent(
+		EVENT_ALL_ACCESS,
+		FALSE,
+		pipe_namew
+	);
+
+	if (event_buffer_ready == NULL) {
+		event_buffer_ready = CreateEvent(
+			NULL,
+			FALSE,	// auto-reset
+			TRUE,	// initial state: signaled
+			pipe_namew
+		);
+
+		if (event_buffer_ready == NULL) {
+			return false;
+		}
+	}
+
+	ksprintf(pipe_name, "flinux-fsig_dataready%d-%d", GetCurrentProcessId(), pipe_id);
+
+	if (MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pipe_name, -1, pipe_namew, sizeof(pipe_namew) / sizeof(wchar_t)) == 0)
+	{
+		return false;
+	}
+
+	// Event: data ready
+	// ---------------------------------------------------------
+	HANDLE event_data_ready = OpenEvent(
+		EVENT_ALL_ACCESS,
+		FALSE,
+		pipe_namew
+	);
+
+	if (event_data_ready == NULL) {
+		event_data_ready = CreateEvent(
+			NULL,
+			FALSE,	// auto-reset
+			TRUE,	// initial state: signaled
+			pipe_namew
+		);
+
+		if (event_data_ready == NULL) {
+			return false;
+		}
+	}
+
+	ksprintf(pipe_name, "flinux-fsig_buffer%d-%d", GetCurrentProcessId(), pipe_id);
+
+	if (MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pipe_name, -1, pipe_namew, sizeof(pipe_namew) / sizeof(wchar_t)) == 0)
+	{
+		return false;
+	}
+
+
+	// Shared memory
+	// ---------------------------------------------------------
+	HANDLE mon_buffer = OpenFileMapping(
+		FILE_MAP_READ,
+		FALSE,
+		pipe_namew
+	);
+
+	if (mon_buffer == NULL) {
+		mon_buffer = CreateFileMapping(
+			INVALID_HANDLE_VALUE,
+			NULL,
+			PAGE_READWRITE,
+			0,
+			sizeof(struct signal_packet),
+			pipe_namew
+		);
+
+		if (mon_buffer == NULL) {
+			return false;
+		}
+	}
+
+	void* buffer = (struct signal_packet *)MapViewOfFile(
+		mon_buffer,
+		SECTION_MAP_READ,
+		0,
+		0,
+		0
+	);
+
+	if (buffer == NULL) {
+		return false;
+	}
+
+	sig->dataready = event_data_ready;
+	sig->bufferready = event_buffer_ready;
+	sig->buffer = buffer;
+
+
 	return true;
 }
 
@@ -156,7 +307,7 @@ static bool signal_thread_deliver_signal(siginfo_t *info)
 	context.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
 	SuspendThread(thread->handle);
 	GetThreadContext(thread->handle, &context);
-	dbt_deliver_signal(thread->handle, &context);
+	//dbt_deliver_signal(thread->handle, &context);
 	thread->current_siginfo = *info;
 	SetEvent(thread->sigevent);
 	SetThreadContext(thread->handle, &context);
@@ -191,19 +342,27 @@ static void signal_thread_handle_child_terminated(struct child_process *proc)
 
 static DWORD WINAPI signal_thread(LPVOID parameter)
 {
-	log_init_thread();
+	//log_init_thread();
 	log_info("Signal thread started.");
 	OVERLAPPED packet_overlapped;
 	memset(&packet_overlapped, 0, sizeof(OVERLAPPED));
 	char buf[1];
 	struct signal_packet packet;
-	ReadFile(signal->sigread, &packet, sizeof(struct signal_packet), NULL, &packet_overlapped);
+
+	//ReadFile(signal->sigread, &packet, sizeof(struct signal_packet), NULL, &packet_overlapped);
 	for (;;)
 	{
+		DWORD ret = WaitForSingleObject(signal->dataready, 500);
+
+		if (ret != WAIT_OBJECT_0)
+			continue;
+
+		memcpy(&packet, signal->buffer, sizeof(packet));
+
 		DWORD bytes;
-		ULONG_PTR key;
+		ULONG_PTR key = 0;
 		LPOVERLAPPED overlapped;
-		BOOL succeed = GetQueuedCompletionStatus(signal->iocp, &bytes, &key, &overlapped, INFINITE);
+		//BOOL succeed = GetQueuedCompletionStatus(signal->iocp, &bytes, &key, &overlapped, INFINITE);
 		if (key == 0)
 		{
 			/* Signal packet */
@@ -247,7 +406,7 @@ static DWORD WINAPI signal_thread(LPVOID parameter)
 				} data;
 				data.len = process_query(packet.query_type, data.buf);
 				DWORD written;
-				WriteFile(signal->sigread, &data, sizeof(int) + data.len, &written, NULL);
+				//WriteFile(signal->sigread, &data, sizeof(int) + data.len, &written, NULL);
 				/* TODO: Avoid blocking when the other end died */
 				break;
 			}
@@ -257,7 +416,6 @@ static DWORD WINAPI signal_thread(LPVOID parameter)
 				return 1;
 			}
 			}
-			ReadFile(signal->sigread, &packet, sizeof(struct signal_packet), NULL, &packet_overlapped);
 		}
 		else
 		{
@@ -274,6 +432,7 @@ void signal_restorer();
 static void signal_save_sigcontext(struct sigcontext *sc, struct syscall_context *context, void *fpstate, uint32_t mask)
 {
 	/* TODO: Add missing register values */
+#ifdef _M_X86
 	sc->gs = 0;
 	sc->fs = 0;
 	sc->es = 0;
@@ -296,24 +455,27 @@ static void signal_save_sigcontext(struct sigcontext *sc, struct syscall_context
 	sc->fpstate = fpstate;
 	sc->oldmask = mask;
 	sc->cr2 = 0;
+#elif defined(_M_ARM)
+
+#endif
 }
 
 void signal_setup_handler(struct syscall_context *context)
 {
 	int sig = current_thread->current_siginfo.si_signo;
-	uintptr_t sp = context->esp;
+	uintptr_t sp = context->sp;
 	/* TODO: Make fpstate layout the same as in Linux kernel */
 	/* Allocate fpstate space */
 	sp -= sizeof(struct fpstate);
 	/* Align fpstate to 512 byte boundary */
-	sp = sp & -512UL;
+	sp = sp & ~(512UL - 1);
 	void *fpstate = (void*)sp;
 	fpu_fxsave(fpstate);
 
 	/* Allocate sigcontext space */
 	sp -= sizeof(struct rt_sigframe);
 	/* align: ((sp + 4) & 15) == 0 */
-	sp = ((sp + 4) & -16UL) - 4;
+	sp = ((sp + 4) & ~(16UL-1)) - 4;
 
 	struct rt_sigframe *frame = (struct rt_sigframe *)sp;
 	frame->pretcode = (uint32_t)signal->actions[sig].sa_restorer; /* FIXME: fix race */
@@ -359,7 +521,7 @@ HANDLE signal_get_process_wait_semaphore()
 
 HANDLE signal_get_process_sigwrite()
 {
-	return signal->sigwrite;
+	return signal->dataready;
 }
 
 HANDLE signal_get_process_query_mutex()
@@ -377,16 +539,16 @@ HANDLE signal_get_process_query_mutex()
 void signal_init_child(struct child_process *proc)
 {
 	HANDLE read, write;
-	create_pipe(&read, &write, false);
-	proc->hPipe = read;
+	//create_pipe(&read, &write, false);
+	//proc->hPipe = read;
 	/* Duplicate and leak write end handle in the child process */
 	HANDLE target;
-	DuplicateHandle(GetCurrentProcess(), write, proc->hProcess, &target, 0, FALSE,
-		DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
-	struct signal_packet packet;
-	packet.type = SIGNAL_PACKET_ADD_PROCESS;
-	packet.proc = proc;
-	send_packet(signal->sigwrite, &packet);
+	//DuplicateHandle(GetCurrentProcess(), write, proc->hProcess, &target, 0, FALSE,
+//		DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
+	//struct signal_packet packet;
+	//packet.type = SIGNAL_PACKET_ADD_PROCESS;
+	//packet.proc = proc;
+	//send_packet(signal->sigwrite, &packet);
 }
 
 /* Deliver signal when masked pending signal is being unmasked */
@@ -397,7 +559,7 @@ static void send_pending_signal()
 	{
 		struct signal_packet packet;
 		packet.type = SIGNAL_PACKET_DELIVER;
-		send_packet(signal->sigwrite, &packet);
+		//send_packet(signal->sigwrite, &packet);
 	}
 }
 
@@ -417,19 +579,19 @@ DEFINE_SYSCALL(rt_sigreturn, uintptr_t, bx, uintptr_t, cx, uintptr_t, dx, uintpt
 	send_pending_signal();
 	LeaveCriticalSection(&signal->mutex);
 	
-	dbt_sigreturn(&frame->uc.uc_mcontext);
+	//dbt_sigreturn(&frame->uc.uc_mcontext);
 }
 
 static void signal_init_private()
 {
 	/* Initialize private structures and handles */
-	if (!create_pipe(&signal->sigread, &signal->sigwrite, true))
+	if (!create_pipe(&signal))
 	{
 		log_error("Signal pipe creation failed, error code: %d", GetLastError());
 		return;
 	}
 	signal->process_wait_semaphore = CreateSemaphoreW(NULL, 0, LONG_MAX, NULL);
-	signal->iocp = CreateIoCompletionPort(signal->sigread, NULL, 0, 1);
+	//signal->iocp = CreateIoCompletionPort(signal->sigread, NULL, 0, 1);
 	signal->query_mutex = CreateMutexW(NULL, FALSE, L"");
 
 	/* Create signal thread */
@@ -480,13 +642,13 @@ void signal_shutdown()
 {
 	struct signal_packet packet;
 	packet.type = SIGNAL_PACKET_SHUTDOWN;
-	send_packet(signal->sigwrite, &packet);
+	//send_packet(signal->sigwrite, &packet);
 	WaitForSingleObject(signal->thread, INFINITE);
 
 	CloseHandle(signal->query_mutex);
 	DeleteCriticalSection(&signal->mutex);
-	CloseHandle(signal->sigread);
-	CloseHandle(signal->sigwrite);
+	CloseHandle(signal->bufferready);
+	CloseHandle(signal->dataready);
 }
 
 void signal_init_thread(struct thread *thread)
@@ -509,7 +671,7 @@ int signal_kill(pid_t pid, siginfo_t *info)
 		struct signal_packet packet;
 		packet.type = SIGNAL_PACKET_KILL;
 		packet.info = *info;
-		send_packet(signal->sigwrite, &packet);
+		//send_packet(signal->sigwrite, &packet);
 		return 0;
 	}
 	else
@@ -636,6 +798,25 @@ DEFINE_SYSCALL(personality, unsigned long, persona)
 	return 0;
 }
 
+DEFINE_SYSCALL(sigaction, int, signum, const struct sigaction *, act, struct sigaction *, oldact)
+{
+	log_info("rt_sigaction(%d, %p, %p)", signum, act, oldact);
+	if (signum < 0 || signum >= _NSIG || signum == SIGKILL || signum == SIGSTOP)
+		return -L_EINVAL;
+	if (act && !mm_check_read(act, sizeof(*act)))
+		return -L_EFAULT;
+	if (oldact && !mm_check_write(oldact, sizeof(*oldact)))
+		return -L_EFAULT;
+	EnterCriticalSection(&signal->mutex);
+	if (oldact)
+		memcpy(oldact, &signal->actions[signum], sizeof(struct sigaction));
+	if (act)
+		memcpy(&signal->actions[signum], act, sizeof(struct sigaction));
+	LeaveCriticalSection(&signal->mutex);
+	return 0;
+}
+
+
 DEFINE_SYSCALL(rt_sigaction, int, signum, const struct sigaction *, act, struct sigaction *, oldact, size_t, sigsetsize)
 {
 	log_info("rt_sigaction(%d, %p, %p)", signum, act, oldact);
@@ -715,4 +896,28 @@ DEFINE_SYSCALL(sigaltstack, const stack_t *, ss, stack_t *, oss)
 	log_info("sigaltstack(ss=%p, oss=%p)", ss, oss);
 	log_error("sigaltstack() not implemented.");
 	return 0;
+}
+
+
+DEFINE_SYSCALL(rt_sigtimedwait, const sigset_t *, set, siginfo_t *, info,
+	const struct timespec *, timeout)
+{
+	if(timeout)
+		log_info("rt_sigtimedwait(set=%p, info=%p, timeout=%p)", set, info, timeout);
+
+	if (!mm_check_read(set, sizeof(sigset_t)))
+		return -L_EACCES;
+
+	if (timeout && !mm_check_read(timeout, sizeof(struct timespec)))
+			return -L_EFAULT;
+
+	DWORD wait = 0;
+	if (timeout)
+		wait = timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000;
+
+	EnterCriticalSection(&signal->mutex);
+	Sleep(10);
+	LeaveCriticalSection(&signal->mutex);
+
+	return -EAGAIN;
 }

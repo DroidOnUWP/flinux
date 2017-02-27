@@ -51,3 +51,7 @@ int tls_kernel_entry_to_offset(int entry);
 int tls_user_entry_to_offset(int entry);
 
 int tls_set_thread_area(struct user_desc *u_info);
+
+extern int __set_tls(void* tls);
+extern void* __get_tls();
+

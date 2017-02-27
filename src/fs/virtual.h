@@ -76,7 +76,7 @@ struct virtualfs_directory_desc
 
 /* VIRTUALFS_TYPE_CUSTOM */
 /* To use this desc, implement a custom file allocation function.
- * Call virtualfs_custom_file_init() in it.
+ * Call virtualfs_init_custom() in it.
  * Set the file_ops.stat vptr to virtualfs_custom_file_stat().
  */
 struct virtualfs_custom_desc
@@ -159,13 +159,13 @@ struct virtualfs_param_desc
 struct virtualfs_custom
 {
 	struct file base_file;
-	struct virtualfs_desc *desc;
+	const struct virtualfs_desc *desc;
 };
 
 int virtualfs_get_poll_status_inout(struct file *f); /* get_poll_status: Always POLLIN | POLLOUT */
 
 /* For custom file */
-void virtualfs_custom_init(void *file, struct virtualfs_desc *desc);
+void virtualfs_init_custom(void *file, struct virtualfs_desc *desc);
 int virtualfs_custom_stat(struct file *f, struct newstat *buf);
 
 /* File system calls */

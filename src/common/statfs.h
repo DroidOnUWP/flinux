@@ -22,6 +22,7 @@ struct statfs {
 	uintptr_t f_spare[4];
 };
 
+
 struct statfs64 {
 	uintptr_t f_type;
 	uintptr_t f_bsize;

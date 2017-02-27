@@ -66,7 +66,7 @@ static int virtualfs_directory_getpath(struct file *f, char *buf)
 	return len_mountpoint + 1 + file->pathlen;
 }
 
-static int virtualfs_directory_llseek(struct file *f, loff_t offset, loff_t *newoffset, int whence)
+static int virtualfs_directory_llseek(struct file *f, lx_loff_t offset, lx_loff_t *newoffset, int whence)
 {
 	AcquireSRWLockExclusive(&f->rw_lock);
 	struct virtualfs_directory *file = (struct virtualfs_directory *)f;
@@ -225,7 +225,7 @@ static struct file *virtualfs_directory_alloc(const struct virtualfs_directory_d
 	return (struct file *)file;
 }
 
-void virtualfs_init_custom(void *f, struct virtualfs_desc *desc)
+void virtualfs_init_custom(void *f, const struct virtualfs_desc *desc)
 {
 	struct virtualfs_custom *file = (struct virtualfs_custom *)f;
 	file->desc = desc;
@@ -356,11 +356,11 @@ static size_t virtualfs_text_read(struct file *f, void *buf, size_t count)
 	return read_count;
 }
 
-static int virtualfs_text_llseek(struct file *f, loff_t offset, loff_t *newoffset, int whence)
+static int virtualfs_text_llseek(struct file *f, lx_loff_t offset, lx_loff_t *newoffset, int whence)
 {
 	AcquireSRWLockExclusive(&f->rw_lock);
 	struct virtualfs_text *file = (struct virtualfs_text *)f;
-	loff_t target;
+	lx_loff_t target;
 	int r;
 	switch (whence)
 	{
@@ -572,8 +572,8 @@ struct virtualfs
 
 static int virtualfs_open(struct mount_point *mp, const char *path, int flags, int internal_flags, int mode, struct file **p, char *target, int buflen)
 {
-	if (flags & O_EXCL)
-		return -L_EPERM;
+	//if (flags & O_EXCL)
+	//	return -L_EPERM;
 	const struct virtualfs_directory_desc *dir = ((struct virtualfs *)mp->fs)->dir;
 	const char *fullpath = path;
 	int tag = 0;

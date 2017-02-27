@@ -21,5 +21,5 @@
 
 #include <fs/virtual.h>
 
-struct virtualfs_char_desc random_desc;
-struct virtualfs_char_desc urandom_desc;
+extern struct virtualfs_char_desc random_desc;
+extern struct virtualfs_custom_desc urandom_desc;

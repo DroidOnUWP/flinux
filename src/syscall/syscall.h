@@ -52,8 +52,23 @@
 #define _SYSCALL_CALL(t, n) (t)n
 #define _SYSCALL_ACTUAL(t, n) t n
 
+#define MAX_ERRNO 4095  /* For recognizing system call error returns. */
+
+
 #define DEFINE_SYSCALL(name, ...) \
 	intptr_t sys_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_ACTUAL, __VA_ARGS__)); \
+	intptr_t _bionic_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_ACTUAL, __VA_ARGS__)) \
+	{ \
+		set_errno(0); \
+		intptr_t ret = sys_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_CALL, __VA_ARGS__)); \
+		if((unsigned long)ret >= (unsigned long)-MAX_ERRNO) \
+		{ \
+				log_error(#name " error: %d", ret); \
+				set_errno(-(ret)); \
+				return -1; \
+		} \
+		return ret; \
+	} \
 	static intptr_t _sys_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_WRAPPER, __VA_ARGS__)) \
 	{ \
 		return sys_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_CALL, __VA_ARGS__)); \
@@ -61,3 +76,5 @@
 	intptr_t sys_##name(_SYSCALL_MAP _MACROCALL() (_SYSCALL_ACTUAL, __VA_ARGS__))
 
 void install_syscall_handler();
+extern void print_debug_info(PCONTEXT context);
+extern void print_stack_trace(void* sp, int max_records);

@@ -1,5 +1,17 @@
 #pragma once
 
+#if _M_ARM
+#define O_DIRECTORY 040000
+#define O_NOFOLLOW 0100000
+#define O_DIRECT 0200000
+#define O_LARGEFILE 0400000
+#else
+#define O_LARGEFILE		00100000
+#define O_DIRECTORY		00200000
+#define O_NOFOLLOW		00400000
+#define O_DIRECT		00040000
+#endif
+
 #define O_ACCMODE		00000003
 #define O_RDONLY		00000000
 #define O_WRONLY		00000001
@@ -12,10 +24,6 @@
 #define O_NONBLOCK		00004000
 #define O_DSYNC			00010000
 #define FASYNC			00020000
-#define O_DIRECT		00040000
-#define O_LARGEFILE		00100000
-#define O_DIRECTORY		00200000
-#define O_NOFOLLOW		00400000
 #define O_NOATIME		01000000
 #define O_CLOEXEC		02000000
 #define __O_SYNC		04000000
@@ -57,6 +65,10 @@
 #define F_SETOWN_EX		15
 #define F_GETOWN_EX		16
 #define F_GETOWNER_UIDS	17
+
+/* LINUX SPECIFIC */
+
+#define F_DUPFD_CLOEXEC 1030
 
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC		1		/* actually anything with low bit set goes */

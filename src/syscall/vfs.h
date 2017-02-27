@@ -34,13 +34,14 @@
 #define MAX_FD_COUNT		1024
 #define MAX_SYMLINK_LEVEL	8
 
-void vfs_init();
+void vfs_init(LPCWSTR root_path, LPCWSTR data_path);
 void vfs_reset();
 void vfs_shutdown();
 int vfs_fork(HANDLE process, DWORD process_id);
 void vfs_afterfork_parent();
 void vfs_afterfork_child();
 int vfs_store_file(struct file *f, int cloexec);
+int vfs_replace(struct file *file, struct file *newfile);
 
 int vfs_openat(int dirfd, const char *pathname, int flags, int internal_flags, int mode, struct file **f);
 struct file *vfs_get(int fd);
@@ -48,3 +49,5 @@ void vfs_ref(struct file *f);
 void vfs_release(struct file *f);
 void vfs_get_root_mountpoint(struct mount_point *mp);
 bool vfs_get_mountpoint(int key, struct mount_point *mp);
+
+intptr_t sys_mkdir(const char * pathname, int mode);

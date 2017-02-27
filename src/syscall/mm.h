@@ -40,7 +40,9 @@
 #define PAGE_SIZE 0x00001000U
 #endif
 
-#define ALIGN_TO(x, a) ((uintptr_t)((x) + (a) - 1) & -(a))
+#define MAP_FAILED ((void *)-1)
+
+#define ALIGN_TO(x, a) ((uintptr_t)((x) + (a) - 1) & ~((a) - 1))
 
 #ifdef _WIN64
 
@@ -79,10 +81,14 @@ int mm_fork(HANDLE process);
 void mm_afterfork_parent();
 void mm_afterfork_child();
 
+int mm_write_process_memory(HANDLE process, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize);
 size_t mm_find_free_pages(size_t count_bytes);
 struct file;
-void *mm_mmap(void *addr, size_t len, int prot, int flags, int internal_flags, struct file *f, off_t offset_pages);
+typedef intptr_t lx_off_t;
+void *mm_mmap(void *addr, size_t len, int prot, int flags, int internal_flags, struct file *f, lx_off_t offset_pages);
 int mm_munmap(void *addr, size_t len);
+
+void *mm_alloc_thread_stack(size_t len, bool guard_page);
 
 /* Populate a memory region containing given address */
 void mm_populate(void *addr);

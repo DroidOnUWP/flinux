@@ -42,7 +42,7 @@ DEFINE_SYSCALL(time, intptr_t *, c)
 	return t;
 }
 
-DEFINE_SYSCALL(gettimeofday, struct timeval *, tv, struct timezone *, tz)
+DEFINE_SYSCALL(gettimeofday, struct linux_timeval *, tv, struct timezone *, tz)
 {
 	log_info("gettimeofday(0x%p, 0x%p)", tv, tz);
 	if (tv && !mm_check_write(tv, sizeof(struct linux_timeval)))

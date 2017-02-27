@@ -21,7 +21,7 @@
 #include <common/auxvec.h>
 #include <common/errno.h>
 #include <common/fcntl.h>
-#include <dbt/x86.h>
+//#include <dbt/x86.h>
 #include <fs/winfs.h>
 #include <syscall/exec.h>
 #include <syscall/mm.h>
@@ -137,7 +137,7 @@ static void run(struct binfmt *binary, int argc, char *argv[], int env_size, cha
 	 * When doing an execve we are overwritting the upper part of the stack while relying on the bottom part!!!
 	 * To get proper behaviour, we first have to save and restore esp on kernel/app switches, which is left to be done
 	 */
-	dbt_run(entrypoint, (size_t)stack);
+	//dbt_run(entrypoint, (size_t)stack_base, (size_t)stack);
 }
 
 static int load_elf(struct file *f, struct binfmt *binary)
@@ -213,7 +213,7 @@ static int load_elf(struct file *f, struct binfmt *binary)
 		{
 			size_t addr = ph->p_vaddr & 0xFFFFF000;
 			size_t size = ph->p_memsz + (ph->p_vaddr & 0x00000FFF);
-			off_t offset_pages = ph->p_offset / PAGE_SIZE;
+			lx_off_t offset_pages = ph->p_offset / PAGE_SIZE;
 
 			/* Note: In ET_DYN executables, all address are based upon elf->load_base.
 			 * But in ET_EXEC executables, all address are absolute.
@@ -336,7 +336,7 @@ static int load_script(struct file *f, struct binfmt *binary)
 int do_execve(const char *filename, int argc, char *argv[], int env_size, char *envp[], char *buffer_base,
 	void (*initialize_routine)())
 {
-	buffer_base = (char*)((uintptr_t)(buffer_base + sizeof(void*) - 1) & -sizeof(void*));
+	buffer_base = (char*)((uintptr_t)(buffer_base + sizeof(void*) - 1) & ~(sizeof(void*)-1));
 
 	/* Detect file type */
 	int r;
@@ -405,7 +405,7 @@ static void execve_initialize_routine()
 	vfs_reset();
 	mm_reset();
 	tls_reset();
-	dbt_reset();
+	//dbt_reset();
 }
 
 static char *flip_startup_base()
@@ -447,8 +447,8 @@ DEFINE_SYSCALL(execve, const char *, filename, char **, argv, char **, envp)
 		base += strlen(envp[env_size]) + 1;
 
 	/* TODO: Test if we have enough size to hold the startup data */
-	
-	char **new_argv = (char **)((uintptr_t)(base + sizeof(void*) - 1) & -sizeof(void*));
+
+	char **new_argv = (char **)((uintptr_t)(base + sizeof(void*) - 1) & ~(sizeof(void*)-1));
 	char **new_envp = new_argv + argc + 1;
 
 	base = current_startup_base;

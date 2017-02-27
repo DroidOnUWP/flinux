@@ -20,3 +20,20 @@
 #pragma once
 
 void socket_init();
+
+struct socket_file_shared
+{
+	int af, type;
+	int events, connect_error;
+};
+
+struct socket_file
+{
+	struct file base_file;
+	SOCKET socket;
+	HANDLE event_handle;
+	HANDLE mutex;
+	WSAPROTOCOL_INFOW fork_info;
+	volatile struct socket_file_shared *shared;
+};
+

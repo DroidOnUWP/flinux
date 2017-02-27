@@ -73,8 +73,8 @@ typedef struct siginfo {
 			pid_t _pid;	/* which child */
 			uid_t _uid;	/* sender's uid */
 			int _status;		/* exit code */
-			clock_t _utime;
-			clock_t _stime;
+			lx_clock_t _utime;
+			lx_clock_t _stime;
 		} _sigchld;
 
 		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
