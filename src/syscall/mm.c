@@ -79,8 +79,10 @@
 #define ADDRESS_SPACE_HIGH		0x80000000U
 /* The lowest non fixed allocation address we can make */
 #define ADDRESS_ALLOCATION_LOW	0x10000000U
+
+//TODO: detect it dynamically, because we sahre memory space with regular DLL loader
 /* The highest non fixed allocation address we can make */
-#define ADDRESS_ALLOCATION_HIGH	0x60000000U
+#define ADDRESS_ALLOCATION_HIGH	0x58000000U
 
 #endif
 

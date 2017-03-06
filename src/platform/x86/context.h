@@ -7,9 +7,28 @@ struct syscall_context
 {
 	/* DO NOT REORDER */
 	/* Context for fork() */
-	DWORD sp;
+	DWORD ebx;
+	DWORD ecx;
+	DWORD edx;
+	DWORD esi;
+	DWORD edi;
+	DWORD ebp;
+	union
+	{
+		DWORD sp;
+		DWORD esp;
+	};
+	union
+	{
+		DWORD pc;
+		DWORD eip;
+	};
 
 	/* The following are not used by fork() */
-	DWORD eax;
+	union
+	{
+		DWORD r0;
+		DWORD eax;
+	};
 	DWORD eflags;
 };

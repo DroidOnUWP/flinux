@@ -1044,3 +1044,10 @@ NTSYSAPI NTSTATUS NTAPI LdrGetProcedureAddress(
 	_Out_		PVOID *FunctionAddress
 	);
 
+NTSYSAPI NTSTATUS NTAPI NtReadVirtualMemory(
+	IN HANDLE ProcessHandle,
+	IN PVOID BaseAddress,
+	OUT PVOID Buffer,
+	IN SIZE_T NumberOfBytesToRead,
+	OUT PSIZE_T NumberOfBytesRead OPTIONAL
+	);

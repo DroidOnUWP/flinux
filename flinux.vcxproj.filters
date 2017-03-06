@@ -142,15 +142,6 @@
     </ClInclude>
     <ClInclude Include="src\platform.h" />
     <ClInclude Include="src\vsprintf.h" />
-    <ClInclude Include="src\syscall\syscall_table_x64.h">
-      <Filter>syscall</Filter>
-    </ClInclude>
-    <ClInclude Include="src\syscall\syscall_table_x86.h">
-      <Filter>syscall</Filter>
-    </ClInclude>
-    <ClInclude Include="src\syscall\syscall_dispatch.h">
-      <Filter>syscall</Filter>
-    </ClInclude>
     <ClInclude Include="src\common\prctl.h">
       <Filter>common</Filter>
     </ClInclude>
@@ -159,12 +150,6 @@
     </ClInclude>
     <ClInclude Include="src\common\futex.h">
       <Filter>common</Filter>
-    </ClInclude>
-    <ClInclude Include="src\dbt\x86.h">
-      <Filter>dbt</Filter>
-    </ClInclude>
-    <ClInclude Include="src\dbt\x86_inst.h">
-      <Filter>dbt</Filter>
     </ClInclude>
     <ClInclude Include="src\fs\null.h">
       <Filter>fs</Filter>
@@ -192,9 +177,6 @@
     </ClInclude>
     <ClInclude Include="src\common\sysinfo.h">
       <Filter>common</Filter>
-    </ClInclude>
-    <ClInclude Include="src\dbt\cpuid.h">
-      <Filter>dbt</Filter>
     </ClInclude>
     <ClInclude Include="src\common\in.h">
       <Filter>common</Filter>
@@ -261,15 +243,31 @@
     <ClInclude Include="src\flags.h" />
     <ClInclude Include="src\win7compat.h" />
     <ClInclude Include="src\shared.h" />
-    <ClInclude Include="src\rc\resource1.h">
-      <Filter>rc</Filter>
-    </ClInclude>
     <ClInclude Include="src\fs\zero.h">
       <Filter>fs</Filter>
     </ClInclude>
+    <ClInclude Include="FLinuxLib.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="src\common\apihelpers.h" />
+    <ClInclude Include="src\common\reset_windef.h" />
+    <ClInclude Include="src\common\winapi_missing.h" />
+    <ClInclude Include="src\fs\android\ashmem.h" />
+    <ClInclude Include="src\fs\android\binder.h" />
+    <ClInclude Include="src\fs\debugout.h" />
+    <ClInclude Include="src\fs\android\logd.h" />
+    <ClInclude Include="src\fs\memory.h" />
+    <ClInclude Include="src\fs\android\propertyd.h" />
+    <ClInclude Include="src\linux\arm\unistd.h" />
+    <ClInclude Include="src\linux\ashmem.h" />
+    <ClInclude Include="src\linux\ioctl.h" />
+    <ClInclude Include="src\linux\irqnr.h" />
+    <ClInclude Include="src\linux\random.h" />
+    <ClInclude Include="src\onecore_types.h" />
+    <ClInclude Include="src\platform\arm\context.h" />
+    <ClInclude Include="src\syscall\kernel_helper.h" />
+    <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\main.c" />
     <ClCompile Include="src\syscall\mm.c">
       <Filter>syscall</Filter>
     </ClCompile>
@@ -303,9 +301,6 @@
     <ClCompile Include="src\fs\pipe.c">
       <Filter>fs</Filter>
     </ClCompile>
-    <ClCompile Include="src\fs\console.c">
-      <Filter>fs</Filter>
-    </ClCompile>
     <ClCompile Include="src\fs\devfs.c">
       <Filter>fs</Filter>
     </ClCompile>
@@ -314,23 +309,14 @@
       <Filter>syscall</Filter>
     </ClCompile>
     <ClCompile Include="src\vsprintf.c" />
-    <ClCompile Include="src\syscall\syscall_dispatch.c">
-      <Filter>syscall</Filter>
-    </ClCompile>
     <ClCompile Include="src\fs\socket.c">
       <Filter>fs</Filter>
-    </ClCompile>
-    <ClCompile Include="src\dbt\x86.c">
-      <Filter>dbt</Filter>
     </ClCompile>
     <ClCompile Include="src\fs\null.c">
       <Filter>fs</Filter>
     </ClCompile>
     <ClCompile Include="src\fs\random.c">
       <Filter>fs</Filter>
-    </ClCompile>
-    <ClCompile Include="src\dbt\cpuid.c">
-      <Filter>dbt</Filter>
     </ClCompile>
     <ClCompile Include="src\wcwidth.c" />
     <ClCompile Include="src\lib\rbtree.c">
@@ -349,20 +335,11 @@
       <Filter>fs</Filter>
     </ClCompile>
     <ClCompile Include="src\vsscanf.c" />
-    <ClCompile Include="src\fs\dsp.c">
-      <Filter>fs</Filter>
-    </ClCompile>
     <ClCompile Include="src\fs\epollfd.c">
       <Filter>fs</Filter>
     </ClCompile>
     <ClCompile Include="src\fs\inotify.c">
       <Filter>fs</Filter>
-    </ClCompile>
-    <ClCompile Include="src\dbt\x86_inst_table.c">
-      <Filter>dbt</Filter>
-    </ClCompile>
-    <ClCompile Include="src\dbt\x86_inst.c">
-      <Filter>dbt</Filter>
     </ClCompile>
     <ClCompile Include="src\syscall\futex.c">
       <Filter>syscall</Filter>
@@ -373,21 +350,16 @@
     <ClCompile Include="src\fs\zero.c">
       <Filter>fs</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <MASM Include="src\syscall\stubs64.asm">
-      <Filter>syscall</Filter>
-    </MASM>
-    <MASM Include="src\syscall\stubs.asm">
-      <Filter>syscall</Filter>
-    </MASM>
-    <MASM Include="src\dbt\x86_trampoline.asm">
-      <Filter>dbt</Filter>
-    </MASM>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="src\rc\flinux.rc">
-      <Filter>rc</Filter>
-    </ResourceCompile>
+    <ClCompile Include="errno.c" />
+    <ClCompile Include="FLinuxLib.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="src\fs\android\ashmem.c" />
+    <ClCompile Include="src\fs\android\binder.c" />
+    <ClCompile Include="src\fs\debugout.c" />
+    <ClCompile Include="src\fs\android\logd.c" />
+    <ClCompile Include="src\fs\android\propertyd.c" />
+    <ClCompile Include="src\fs\memory.c" />
+    <ClCompile Include="src\memutils.c" />
+    <ClCompile Include="src\syscall\kernel_helper.c" />
   </ItemGroup>
 </Project>

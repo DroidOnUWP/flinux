@@ -294,7 +294,11 @@ static pid_t fork_process_for_execve(struct syscall_context *context, unsigned l
 
 
 	int stack_diff = ((char*)InitialTeb.StackBase - (char*)stack_base);
+#if defined(_M_ARM)
 	ctx.Sp = ctx.Sp + stack_diff;
+#elif defined(_M_IX86)
+	ctx.Esp = ctx.Esp + stack_diff;
+#endif
 	memcpy(InitialTeb.StackLimit, stack_limit, stack_size);
 	*(bool*)(&child + stack_diff) = true;
 
@@ -340,7 +344,7 @@ static pid_t fork_process_experimental2(struct syscall_context *context, unsigne
 	RTL_USER_PROCESS_INFORMATION process_info;
 	NTSTATUS result;
 
-	GetSecurityInfo();
+	//GetSecurityInfo();
 
 	result = RtlCloneUserProcess(RTL_CLONE_PROCESS_FLAGS_CREATE_SUSPENDED | RTL_CLONE_PROCESS_FLAGS_INHERIT_HANDLES, NULL, NULL, NULL, &process_info);
 
@@ -365,7 +369,7 @@ static pid_t fork_process_experimental2(struct syscall_context *context, unsigne
 	{
 		sys_mkdir("/ahoj", 0777);
 		/* fix stdio */
-		AllocConsole();
+		//AllocConsole();
 		OutputDebugStringA("forked");
 		return 0;
 	}
@@ -486,7 +490,11 @@ static pid_t fork_process_experimental(struct syscall_context *context, unsigned
 
 	/* Copy stack */
 	VirtualAllocEx(info.hProcess, stack_base, (char *)stack_base - (char*)stack_limit, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); //was execute, why?
+#if defined(_M_ARM)
 	mm_write_process_memory(info.hProcess, (PVOID)ctx.Sp, (PVOID)ctx.Sp, (SIZE_T)((char *)stack_base + ctx.Sp));
+#elif defined(_M_IX86)
+	mm_write_process_memory(info.hProcess, (PVOID)ctx.Esp, (PVOID)ctx.Esp, (SIZE_T)((char *)stack_base + ctx.Esp));
+#endif
 
 
 	SetThreadContext(info.hThread, &ctx);
@@ -591,9 +599,15 @@ pid_t __bionic_clone(uint32_t flags, void* child_stack, int* parent_tid, void* t
 
 	RtlCaptureContext(&ThreadContext);
 
+#if defined(_M_ARM)
 	ThreadContext.Sp = child_stack;
 	ThreadContext.Pc = __bionic_thread_callback;
 	ThreadContext.R0 = info;
+#elif defined(_M_IX86)
+	ThreadContext.Esp = child_stack;
+	ThreadContext.Eip = __bionic_thread_callback;
+	ThreadContext.Eax = info;
+#endif
 
 	mm_handle_page_fault(child_stack, true);
 	mm_handle_page_fault((char*)child_stack - PAGE_SIZE, true);

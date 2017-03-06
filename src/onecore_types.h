@@ -322,3 +322,52 @@ FlushInstructionCache(
 	_In_reads_bytes_opt_(dwSize) LPCVOID lpBaseAddress,
 	_In_ SIZE_T dwSize
 );
+
+VOID
+WINAPI
+RtlCaptureContext(
+	_Out_ PCONTEXT ContextRecord
+);
+
+
+typedef enum _SE_OBJECT_TYPE {
+	SE_UNKNOWN_OBJECT_TYPE = 0,
+	SE_FILE_OBJECT,
+	SE_SERVICE,
+	SE_PRINTER,
+	SE_REGISTRY_KEY,
+	SE_LMSHARE,
+	SE_KERNEL_OBJECT,
+	SE_WINDOW_OBJECT,
+	SE_DS_OBJECT,
+	SE_DS_OBJECT_ALL,
+	SE_PROVIDER_DEFINED_OBJECT,
+	SE_WMIGUID_OBJECT,
+	SE_REGISTRY_WOW64_32KEY
+} SE_OBJECT_TYPE;
+
+
+DWORD
+WINAPI
+GetSecurityInfo(
+	_In_      HANDLE               handle,
+	_In_      SE_OBJECT_TYPE       ObjectType,
+	_In_      SECURITY_INFORMATION SecurityInfo,
+	_Out_opt_ PSID                 *ppsidOwner,
+	_Out_opt_ PSID                 *ppsidGroup,
+	_Out_opt_ PACL                 *ppDacl,
+	_Out_opt_ PACL                 *ppSacl,
+	_Out_opt_ PSECURITY_DESCRIPTOR *ppSecurityDescriptor
+);
+
+
+
+BOOL
+WINAPI
+WriteProcessMemory(
+	_In_  HANDLE  hProcess,
+	_In_  LPVOID  lpBaseAddress,
+	_In_  LPCVOID lpBuffer,
+	_In_  SIZE_T  nSize,
+	_Out_ SIZE_T  *lpNumberOfBytesWritten
+);

@@ -829,7 +829,11 @@ DEFINE_SYSCALL(exit, int, status)
 	log_info("exit(%d)", status);
 	CONTEXT ctx;
 	RtlCaptureContext(&ctx);
+#if defined(_M_ARM)
 	print_stack_trace(ctx.Sp, 200);
+#elif defined(_M_IX86)
+	print_stack_trace(ctx.Esp, 200);
+#endif
 	thread_exit(status, 0);
 }
 

@@ -211,7 +211,43 @@ static LONG CALLBACK exception_handler(PEXCEPTION_POINTERS ep)
 			{
 				log_warning("__kuser_helper_version not supported yet");
 			}
+
+#elif defined(_M_IX86)
+			//test for reading TLS
+			if (*code == 0x65)
+			{
+				uint8_t* code1 = code + 1;
+
+				if (*code1 == 0xa1) //eax
+				{
+					 ep->ContextRecord->Eax = ((char*)__get_tls())[ep->ExceptionRecord->ExceptionInformation[1]];
+					 return EXCEPTION_CONTINUE_EXECUTION;
+				}
+				else if (*code1 == 0x8b) //others
+				{
+					uint8_t* code2 = code + 2;
+					switch (*code2)
+					{
+					case 0x0d:
+						ep->ContextRecord->Ecx = ((char*)__get_tls())[ep->ExceptionRecord->ExceptionInformation[1]];
+						return EXCEPTION_CONTINUE_EXECUTION;
+					case 0x15:
+						ep->ContextRecord->Edx = ((char*)__get_tls())[ep->ExceptionRecord->ExceptionInformation[1]];
+						return EXCEPTION_CONTINUE_EXECUTION;
+					case 0x35:
+						ep->ContextRecord->Esi = ((char*)__get_tls())[ep->ExceptionRecord->ExceptionInformation[1]];
+						return EXCEPTION_CONTINUE_EXECUTION;
+					case 0x3d:
+						ep->ContextRecord->Edi = ((char*)__get_tls())[ep->ExceptionRecord->ExceptionInformation[1]];
+						return EXCEPTION_CONTINUE_EXECUTION;
+					default:
+						break;
+					}
+
+				}
+			}
 #endif
+
 			/* Read/write problem */
 			log_info("IP: 0x%p", code);
 			bool is_write = (ep->ExceptionRecord->ExceptionInformation[0] == 1);
