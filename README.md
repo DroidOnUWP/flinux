@@ -1,6 +1,8 @@
 Foreign LINUX - UWP Port
 ======
 
+[![Join the chat at https://gitter.im/DroidOnUWP/flinux](https://badges.gitter.im/DroidOnUWP/flinux.svg)](https://gitter.im/DroidOnUWP/flinux?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 [![Build status](https://ci.appveyor.com/api/projects/status/a340ver0l85l14tf?svg=true)](https://ci.appveyor.com/project/wishstudio/flinux)
 
 [![Join the chat at https://gitter.im/DroidOnUWP/flinux](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/DroidOnUWP/flinux?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
