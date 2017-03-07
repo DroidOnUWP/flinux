@@ -18,7 +18,11 @@
  */
 
 #pragma once
+#if defined(_M_ARM)
 #include "platform/arm/context.h"
+#elif defined(_M_IX86)
+#include "platform/x86/context.h"
+#endif
 
 extern void fork_init();
 

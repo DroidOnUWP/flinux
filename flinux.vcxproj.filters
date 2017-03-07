@@ -266,6 +266,7 @@
     <ClInclude Include="src\platform\arm\context.h" />
     <ClInclude Include="src\syscall\kernel_helper.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="src\platform\x86\context.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\syscall\mm.c">

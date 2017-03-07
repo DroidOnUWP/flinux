@@ -248,6 +248,7 @@
     <ClInclude Include="src\onecore_types.h" />
     <ClInclude Include="src\platform.h" />
     <ClInclude Include="src\platform\arm\context.h" />
+    <ClInclude Include="src\platform\x86\context.h" />
     <ClInclude Include="src\shared.h" />
     <ClInclude Include="src\str.h" />
     <ClInclude Include="src\syscall\exec.h" />

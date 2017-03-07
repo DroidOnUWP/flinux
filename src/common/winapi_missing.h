@@ -85,7 +85,7 @@ typedef struct _TEB {
 
 typedef
 VOID
-(*NTAPI RtlInitializeContext_t)(
+(*RtlInitializeContext_t)(
 	HANDLE Process,
 	PCONTEXT Context,
 	PVOID Parameter,
