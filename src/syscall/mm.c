@@ -78,11 +78,13 @@
 /* Higher bound of the virtual address space */
 #define ADDRESS_SPACE_HIGH		0x80000000U
 /* The lowest non fixed allocation address we can make */
-#define ADDRESS_ALLOCATION_LOW	0x10000000U
+//#define ADDRESS_ALLOCATION_LOW	0x10000000U
+void* mm_address_allocation_low;
 
 //TODO: detect it dynamically, because we sahre memory space with regular DLL loader
 /* The highest non fixed allocation address we can make */
-#define ADDRESS_ALLOCATION_HIGH	0x58000000U
+//#define ADDRESS_ALLOCATION_HIGH	0x58000000U
+void* mm_address_allocation_high;
 
 #endif
 
@@ -345,6 +347,49 @@ static void free_map_entry_blocks(struct map_entry *e)
 }
 
 
+/* To prevent collisions with Windows module loader pre-allocate all memory blocks
+   and keep some small space for Windows to be able to breathe */
+void mm_reserve_blocks()
+{
+	PVOID heap_start = 0;
+	size_t heap_size = 0;
+	char *addr = 0;
+	do
+	{
+		MEMORY_BASIC_INFORMATION info;
+		VirtualQueryEx(GetCurrentProcess(), addr, &info, sizeof(info));
+		if (info.State == MEM_FREE)
+		{
+			log_info("0x%p - 0x%p", info.BaseAddress, (size_t)info.BaseAddress + info.RegionSize);
+			if (info.RegionSize > heap_size)
+			{
+				heap_size = info.RegionSize;
+				heap_start = info.BaseAddress;
+			}
+		}
+		addr += info.RegionSize;
+	} while ((size_t)addr < 0x7FFF0000U);
+
+	size_t start_block = GET_BLOCK(heap_start);
+	size_t end_block = GET_BLOCK((size_t)heap_start + heap_size) - 1;
+	if (!IS_ALIGNED(heap_start, BLOCK_SIZE))
+		start_block++;
+
+	heap_start = GET_BLOCK_ADDRESS(start_block);
+
+	addr = heap_start;
+
+	for (size_t block = start_block; block <= end_block; block++)
+	{
+		void* mem = VirtualAlloc(GET_BLOCK_ADDRESS(block), BLOCK_SIZE, MEM_RESERVE, PAGE_NOACCESS);
+	}
+
+	mm_address_allocation_low = heap_start;
+	mm_address_allocation_high = GET_BLOCK_ADDRESS(end_block);
+
+}
+
+
 void mm_init()
 {
 	/* Initialize RW lock */
@@ -359,12 +404,18 @@ void mm_init()
 	for (size_t i = 0; i + 1 < MAX_MMAP_COUNT; i++)
 		slist_add(&mm->entry_free_list, &mm->entries[i].free_list);
 	mm->brk = 0;
+
 	/* Initialize section handle table */
 	mm_section_handle = VirtualAlloc(NULL, BLOCK_COUNT * sizeof(HANDLE), MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE);
+
+	/* Pre-reserve blocks */
+	mm_reserve_blocks();
+
 	/* Initialize static alloc */
 	mm->static_alloc_begin = mm_mmap(NULL, MM_STATIC_ALLOC_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS,
 		INTERNAL_MAP_TOPDOWN | INTERNAL_MAP_NORESET | INTERNAL_MAP_VIRTUALALLOC, NULL, 0);
 	mm->static_alloc_end = (uint8_t*)mm->static_alloc_begin + MM_STATIC_ALLOC_SIZE;
+
 }
 
 void mm_reset()
@@ -450,7 +501,7 @@ void mm_update_brk(void *brk)
 /* Find 'count' consecutive free pages near addr, return 0 if not found */
 static size_t find_nearest_free_pages(void* addr, size_t count, bool block_align)
 {
-	size_t last = GET_PAGE(ADDRESS_ALLOCATION_LOW);
+	size_t last = GET_PAGE(mm_address_allocation_low);
 	size_t req_start_page = GET_PAGE(addr);
 	size_t req_end_page = GET_PAGE((char*)addr + count - 1);
 
@@ -469,10 +520,10 @@ static size_t find_nearest_free_pages(void* addr, size_t count, bool block_align
 			if (block_align || BLOCK_ALIGNED(e->flags))
 				last = (last + PAGES_PER_BLOCK - 1) & ~(PAGES_PER_BLOCK - 1);
 		}
-		if (last >= GET_PAGE(ADDRESS_ALLOCATION_HIGH))
+		if (last >= GET_PAGE(mm_address_allocation_high))
 			return 0;
 	}
-	if (GET_PAGE(ADDRESS_ALLOCATION_HIGH) > last && GET_PAGE(ADDRESS_ALLOCATION_HIGH) - last >= count)
+	if (GET_PAGE(mm_address_allocation_high) > last && GET_PAGE(mm_address_allocation_high) - last >= count)
 		return last;
 	else
 		return 0;
@@ -494,10 +545,10 @@ static size_t find_free_pages_hint(void* addr, size_t count, bool block_align)
 			if (block_align || BLOCK_ALIGNED(e->flags))
 				last = (last + PAGES_PER_BLOCK - 1) & ~(PAGES_PER_BLOCK-1);
 		}
-		if (last >= GET_PAGE(ADDRESS_ALLOCATION_HIGH))
+		if (last >= GET_PAGE(mm_address_allocation_high))
 			return 0;
 	}
-	if (GET_PAGE(ADDRESS_ALLOCATION_HIGH) > last && GET_PAGE(ADDRESS_ALLOCATION_HIGH) - last >= count)
+	if (GET_PAGE(mm_address_allocation_high) > last && GET_PAGE(mm_address_allocation_high) - last >= count)
 		return last;
 	else
 		return 0;
@@ -505,13 +556,13 @@ static size_t find_free_pages_hint(void* addr, size_t count, bool block_align)
 
 static size_t find_free_pages(size_t count, bool block_align)
 {
-	find_free_pages_hint(ADDRESS_ALLOCATION_LOW, count, block_align);
+	find_free_pages_hint(mm_address_allocation_low, count, block_align);
 }
 
 /* Find 'count' consecutive free pages at the highest possible address with, return 0 if not found */
 static size_t find_free_pages_topdown(size_t count, bool block_align)
 {
-	size_t last = GET_PAGE(ADDRESS_ALLOCATION_HIGH);
+	size_t last = GET_PAGE(mm_address_allocation_high);
 	for (struct rb_node *cur = rb_last(&mm->entry_tree); cur; cur = rb_prev(cur))
 	{
 		struct map_entry *e = rb_entry(cur, struct map_entry, tree);
@@ -527,10 +578,10 @@ static size_t find_free_pages_topdown(size_t count, bool block_align)
 			if (block_align)
 				last &= ~(PAGES_PER_BLOCK - 1);
 		}
-		if (last <= GET_PAGE(ADDRESS_ALLOCATION_LOW))
+		if (last <= GET_PAGE(mm_address_allocation_low))
 			return 0;
 	}
-	if (GET_PAGE(ADDRESS_ALLOCATION_LOW) < last && GET_PAGE(ADDRESS_ALLOCATION_LOW) + count < last)
+	if (GET_PAGE(mm_address_allocation_low) < last && GET_PAGE(mm_address_allocation_low) + count < last)
 		return last - count;
 	else
 		return 0;
@@ -773,6 +824,15 @@ static int allocate_block(size_t i)
 	/* Map section */
 	PVOID base_addr = GET_BLOCK_ADDRESS(i);
 	SIZE_T view_size = BLOCK_SIZE;
+
+	if (!VirtualFree(base_addr, 0, MEM_RELEASE))
+	{
+		log_error("VirtualFree() failed. Address: %p, Status: %x", base_addr, GetLastError());
+		NtClose(handle);
+		return 0;
+	}
+
+
 	status = NtMapViewOfSection(handle, NtCurrentProcess(), &base_addr, 0, BLOCK_SIZE, NULL, &view_size, ViewUnmap, 0, PAGE_EXECUTE_READWRITE);
 	if (!NT_SUCCESS(status))
 	{
@@ -1022,7 +1082,7 @@ static int handle_on_demand_page_fault(void *addr)
 int mm_handle_page_fault(void *addr, bool is_write)
 {
 	log_info("Handling page fault at address %p (page %p)", addr, GET_PAGE(addr));
-	if ((size_t)addr < ADDRESS_SPACE_LOW || (size_t)addr >= ADDRESS_SPACE_HIGH)
+	if ((size_t)addr < mm_address_allocation_low || (size_t)addr >= mm_address_allocation_high) //Was: if ((size_t)addr < ADDRESS_SPACE_LOW || (size_t)addr >= ADDRESS_SPACE_HIGH)
 	{
 		log_warning("Address %p outside of valid usermode address space.", addr);
 		return 0;
@@ -1386,6 +1446,13 @@ static void *mmap_internal(void *addr, size_t length, int prot, int flags, int i
 
 	if (internal_flags & INTERNAL_MAP_VIRTUALALLOC)
 	{
+		/* Ensure block is not reserved */
+		for (size_t block = start_block; block <= end_block; block++)
+		{
+			VirtualFree(GET_BLOCK_ADDRESS(block), 0, MEM_RELEASE); //ignore result because it can be called on already unreserved block
+		}
+
+
 		/* Allocate the memory now */
 		if (!VirtualAlloc(GET_PAGE_ADDRESS(start_page), (end_page - start_page + 1) * PAGE_SIZE, MEM_RESERVE | MEM_COMMIT, prot_linux2win(prot)))
 		{
